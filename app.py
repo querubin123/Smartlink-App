@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 import requests
 import time
 import urllib.parse
+import json
 
 # Page config must be the first Streamlit command
 st.set_page_config(
@@ -648,6 +649,192 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================================
+# IMPROVED IP GEOLOCATION FUNCTIONS
+# ============================================================================
+
+def get_real_ip():
+    """Try to get the real IP address of the visitor using multiple sources"""
+    ip_sources = [
+        'https://api.ipify.org?format=json',
+        'https://api.my-ip.io/ip.json',
+        'https://ipapi.co/json/'
+    ]
+    
+    for source in ip_sources:
+        try:
+            response = requests.get(source, timeout=5)
+            if response.status_code == 200:
+                if 'ipify' in source:
+                    return response.json()['ip']
+                elif 'my-ip.io' in source:
+                    return response.json()['ip']
+                elif 'ipapi.co' in source:
+                    return response.json()['ip']
+        except:
+            continue
+    
+    # Fallback to get IP from headers (for deployed apps)
+    try:
+        # Try to get from request headers (Streamlit Cloud)
+        import streamlit as st
+        client_ip = st.request.headers.get('X-Forwarded-For', st.request.remote_addr)
+        if client_ip:
+            return client_ip.split(',')[0].strip()
+    except:
+        pass
+    
+    return "127.0.0.1"
+
+def get_geolocation_from_ip(ip_address):
+    """Get detailed geolocation from IP address using multiple reliable APIs"""
+    
+    # Skip localhost
+    if ip_address in ["127.0.0.1", "localhost", "::1"]:
+        # Try to get public IP first
+        try:
+            response = requests.get('https://api.ipify.org?format=json', timeout=5)
+            if response.status_code == 200:
+                ip_address = response.json()['ip']
+            else:
+                return {
+                    'country': 'Unknown',
+                    'city': 'Unknown',
+                    'region': 'Unknown',
+                    'lat': 0,
+                    'lon': 0,
+                    'isp': 'Unknown'
+                }
+        except:
+            return {
+                'country': 'Unknown',
+                'city': 'Unknown',
+                'region': 'Unknown',
+                'lat': 0,
+                'lon': 0,
+                'isp': 'Unknown'
+            }
+    
+    # Try multiple geolocation APIs
+    geo_apis = [
+        {
+            'url': f'http://ip-api.com/json/{ip_address}?fields=status,country,city,regionName,lat,lon,isp',
+            'parser': lambda d: {
+                'country': d.get('country', 'Unknown'),
+                'city': d.get('city', 'Unknown'),
+                'region': d.get('regionName', 'Unknown'),
+                'lat': d.get('lat', 0),
+                'lon': d.get('lon', 0),
+                'isp': d.get('isp', 'Unknown')
+            } if d.get('status') == 'success' else None
+        },
+        {
+            'url': f'https://ipapi.co/{ip_address}/json/',
+            'parser': lambda d: {
+                'country': d.get('country_name', 'Unknown'),
+                'city': d.get('city', 'Unknown'),
+                'region': d.get('region', 'Unknown'),
+                'lat': d.get('latitude', 0),
+                'lon': d.get('longitude', 0),
+                'isp': d.get('org', 'Unknown')
+            } if d.get('country_name') else None
+        },
+        {
+            'url': f'https://ipwhois.io/json/{ip_address}',
+            'parser': lambda d: {
+                'country': d.get('country', 'Unknown'),
+                'city': d.get('city', 'Unknown'),
+                'region': d.get('region', 'Unknown'),
+                'lat': float(d.get('latitude', 0)),
+                'lon': float(d.get('longitude', 0)),
+                'isp': d.get('isp', 'Unknown')
+            } if d.get('success') != False and d.get('country') else None
+        }
+    ]
+    
+    for api in geo_apis:
+        try:
+            response = requests.get(api['url'], timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                result = api['parser'](data)
+                if result and result['country'] != 'Unknown':
+                    print(f"Geolocation success via {api['url']}: {result['country']}")
+                    return result
+        except Exception as e:
+            print(f"Geolocation API error: {e}")
+            continue
+    
+    # Final fallback
+    return {
+        'country': 'Unknown',
+        'city': 'Unknown',
+        'region': 'Unknown',
+        'lat': 0,
+        'lon': 0,
+        'isp': 'Unknown'
+    }
+
+def get_client_info():
+    """Get comprehensive client information from request headers"""
+    try:
+        # Try to get real user agent from request headers
+        user_agent = st.request.headers.get('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+    except:
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    
+    # Parse user agent
+    device, browser, operating_system = parse_user_agent(user_agent)
+    
+    return {
+        'user_agent': user_agent,
+        'device': device,
+        'browser': browser,
+        'operating_system': operating_system
+    }
+
+def parse_user_agent(user_agent_string):
+    """Parse user agent string to get device and browser info"""
+    user_agent = user_agent_string.lower()
+    
+    # Detect browser
+    if 'chrome' in user_agent and 'edg' not in user_agent and 'opr' not in user_agent:
+        browser = 'Chrome'
+    elif 'firefox' in user_agent:
+        browser = 'Firefox'
+    elif 'safari' in user_agent and 'chrome' not in user_agent:
+        browser = 'Safari'
+    elif 'edg' in user_agent:
+        browser = 'Edge'
+    elif 'opr' in user_agent or 'opera' in user_agent:
+        browser = 'Opera'
+    else:
+        browser = 'Unknown'
+    
+    # Detect OS
+    if 'windows' in user_agent:
+        operating_system = 'Windows'
+    elif 'mac' in user_agent:
+        operating_system = 'macOS'
+    elif 'linux' in user_agent:
+        operating_system = 'Linux'
+    elif 'android' in user_agent:
+        operating_system = 'Android'
+    elif 'ios' in user_agent or 'iphone' in user_agent or 'ipad' in user_agent:
+        operating_system = 'iOS'
+    else:
+        operating_system = 'Unknown'
+    
+    # Detect device type
+    if 'mobile' in user_agent or ('android' in user_agent and 'mobile' in user_agent):
+        device = 'Mobile'
+    elif 'tablet' in user_agent or 'ipad' in user_agent:
+        device = 'Tablet'
+    else:
+        device = 'Desktop'
+    
+    return device, browser, operating_system
+
+# ============================================================================
 # DATABASE FUNCTIONS
 # ============================================================================
 def get_db_path():
@@ -684,6 +871,7 @@ def init_db():
             region TEXT DEFAULT 'Unknown',
             latitude REAL DEFAULT 0,
             longitude REAL DEFAULT 0,
+            isp TEXT DEFAULT 'Unknown',
             device_type TEXT DEFAULT 'Unknown',
             browser TEXT DEFAULT 'Unknown',
             browser_version TEXT DEFAULT 'Unknown',
@@ -722,6 +910,7 @@ def check_and_update_schema():
             'region': 'TEXT DEFAULT "Unknown"',
             'latitude': 'REAL DEFAULT 0',
             'longitude': 'REAL DEFAULT 0',
+            'isp': 'TEXT DEFAULT "Unknown"',
             'device_type': 'TEXT DEFAULT "Unknown"',
             'browser': 'TEXT DEFAULT "Unknown"',
             'browser_version': 'TEXT DEFAULT "Unknown"',
@@ -807,119 +996,6 @@ def generate_short_code(length=6):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
 
-def get_real_ip():
-    """Try to get the real IP address of the visitor"""
-    try:
-        response = requests.get('https://api.ipify.org?format=json', timeout=3)
-        if response.status_code == 200:
-            return response.json()['ip']
-    except:
-        pass
-    return "127.0.0.1"
-
-def get_geolocation_from_ip(ip_address):
-    """Get detailed geolocation from IP address using ip-api.com"""
-    if ip_address == "127.0.0.1" or ip_address == "Unknown":
-        try:
-            response = requests.get('https://api.ipify.org?format=json', timeout=3)
-            if response.status_code == 200:
-                ip_address = response.json()['ip']
-            else:
-                return {
-                    'country': 'Unknown',
-                    'city': 'Unknown',
-                    'region': 'Unknown',
-                    'lat': 0,
-                    'lon': 0
-                }
-        except:
-            return {
-                'country': 'Unknown',
-                'city': 'Unknown',
-                'region': 'Unknown',
-                'lat': 0,
-                'lon': 0
-            }
-    
-    try:
-        response = requests.get(f'http://ip-api.com/json/{ip_address}?fields=status,country,city,regionName,lat,lon', timeout=3)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('status') == 'success':
-                return {
-                    'country': data.get('country', 'Unknown'),
-                    'city': data.get('city', 'Unknown'),
-                    'region': data.get('regionName', 'Unknown'),
-                    'lat': data.get('lat', 0),
-                    'lon': data.get('lon', 0)
-                }
-    except Exception as e:
-        print(f"Geolocation error: {e}")
-    
-    return {
-        'country': 'Unknown',
-        'city': 'Unknown',
-        'region': 'Unknown',
-        'lat': 0,
-        'lon': 0
-    }
-
-def parse_user_agent(user_agent_string):
-    """Parse user agent string to get device and browser info"""
-    user_agent = user_agent_string.lower()
-    
-    # Detect browser
-    if 'chrome' in user_agent and 'edg' not in user_agent and 'opr' not in user_agent:
-        browser = 'Chrome'
-    elif 'firefox' in user_agent:
-        browser = 'Firefox'
-    elif 'safari' in user_agent and 'chrome' not in user_agent:
-        browser = 'Safari'
-    elif 'edg' in user_agent:
-        browser = 'Edge'
-    elif 'opr' in user_agent or 'opera' in user_agent:
-        browser = 'Opera'
-    else:
-        browser = 'Unknown'
-    
-    # Detect OS
-    if 'windows' in user_agent:
-        operating_system = 'Windows'
-    elif 'mac' in user_agent:
-        operating_system = 'macOS'
-    elif 'linux' in user_agent:
-        operating_system = 'Linux'
-    elif 'android' in user_agent:
-        operating_system = 'Android'
-    elif 'ios' in user_agent or 'iphone' in user_agent or 'ipad' in user_agent:
-        operating_system = 'iOS'
-    else:
-        operating_system = 'Unknown'
-    
-    # Detect device type
-    if 'mobile' in user_agent or ('android' in user_agent and 'mobile' in user_agent):
-        device = 'Mobile'
-    elif 'tablet' in user_agent or 'ipad' in user_agent:
-        device = 'Tablet'
-    else:
-        device = 'Desktop'
-    
-    return device, browser, operating_system
-
-def get_client_info():
-    """Get comprehensive client information"""
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    
-    # Parse user agent
-    device, browser, operating_system = parse_user_agent(user_agent)
-    
-    return {
-        'user_agent': user_agent,
-        'device': device,
-        'browser': browser,
-        'operating_system': operating_system
-    }
-
 def get_link(short_code):
     """Get a link by short code"""
     conn = None
@@ -967,48 +1043,29 @@ def record_click(short_code):
         # Get REAL client info
         client_info = get_client_info()
         
-        # For demo/debugging, print the real data
-        print(f"Real data - IP: {ip_address}, Country: {geo_data['country']}, City: {geo_data['city']}, Browser: {client_info['browser']}, OS: {client_info['operating_system']}")
-        
-        # Get referer (would come from headers in production)
+        # Get referer
         referer = "Direct"
+        try:
+            referer = st.request.headers.get('Referer', 'Direct')
+        except:
+            pass
         
-        # Check which columns exist
-        c.execute("PRAGMA table_info(clicks)")
-        columns = [column[1] for column in c.fetchall()]
+        print(f"Click recorded - IP: {ip_address}, Country: {geo_data['country']}, City: {geo_data['city']}, Browser: {client_info['browser']}, OS: {client_info['operating_system']}")
         
-        # Build the INSERT statement dynamically based on existing columns
-        if all(col in columns for col in ['city', 'region', 'latitude', 'longitude', 'device_type', 'browser', 'operating_system', 'user_agent']):
-            # All columns exist
-            c.execute("""
-                INSERT INTO clicks (
-                    short_code, click_time, ip_address, 
-                    country, city, region, latitude, longitude,
-                    device_type, browser, operating_system, referer, user_agent
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                short_code, click_time, ip_address,
-                geo_data['country'], geo_data['city'], geo_data['region'], 
-                geo_data['lat'], geo_data['lon'],
-                client_info['device'], client_info['browser'], client_info['operating_system'],
-                referer, client_info['user_agent']
-            ))
-        elif 'city' in columns and 'device_type' in columns:
-            # Partial columns exist
-            c.execute("""
-                INSERT INTO clicks (short_code, click_time, ip_address, country, city, device_type, browser, referer) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
+        # Insert click record
+        c.execute("""
+            INSERT INTO clicks (
                 short_code, click_time, ip_address, 
-                geo_data['country'], geo_data['city'],
-                client_info['device'], client_info['browser'], referer
-            ))
-        else:
-            # Basic columns only
-            c.execute("""
-                INSERT INTO clicks (short_code, click_time, ip_address, country, referer) 
-                VALUES (?, ?, ?, ?, ?)
-            """, (short_code, click_time, ip_address, geo_data['country'], referer))
+                country, city, region, latitude, longitude, isp,
+                device_type, browser, operating_system, referer, user_agent
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            short_code, click_time, ip_address,
+            geo_data['country'], geo_data['city'], geo_data['region'], 
+            geo_data['lat'], geo_data['lon'], geo_data.get('isp', 'Unknown'),
+            client_info['device'], client_info['browser'], client_info['operating_system'],
+            referer, client_info['user_agent']
+        ))
         
         # Update click count and last clicked
         c.execute("""
@@ -1117,22 +1174,14 @@ def get_device_stats():
     try:
         conn = sqlite3.connect(get_db_path())
         c = conn.cursor()
-        
-        # Check if device_type column exists
-        c.execute("PRAGMA table_info(clicks)")
-        columns = [column[1] for column in c.fetchall()]
-        
-        if 'device_type' in columns:
-            c.execute("""
-                SELECT device_type, COUNT(*) as count 
-                FROM clicks 
-                WHERE device_type != 'Unknown'
-                GROUP BY device_type 
-                ORDER BY count DESC
-            """)
-            return c.fetchall()
-        else:
-            return []
+        c.execute("""
+            SELECT device_type, COUNT(*) as count 
+            FROM clicks 
+            WHERE device_type != 'Unknown'
+            GROUP BY device_type 
+            ORDER BY count DESC
+        """)
+        return c.fetchall()
     except Exception as e:
         print(f"Error getting device stats: {e}")
         return []
@@ -1146,22 +1195,14 @@ def get_browser_stats():
     try:
         conn = sqlite3.connect(get_db_path())
         c = conn.cursor()
-        
-        # Check if browser column exists
-        c.execute("PRAGMA table_info(clicks)")
-        columns = [column[1] for column in c.fetchall()]
-        
-        if 'browser' in columns:
-            c.execute("""
-                SELECT browser, COUNT(*) as count 
-                FROM clicks 
-                WHERE browser != 'Unknown'
-                GROUP BY browser 
-                ORDER BY count DESC
-            """)
-            return c.fetchall()
-        else:
-            return []
+        c.execute("""
+            SELECT browser, COUNT(*) as count 
+            FROM clicks 
+            WHERE browser != 'Unknown'
+            GROUP BY browser 
+            ORDER BY count DESC
+        """)
+        return c.fetchall()
     except Exception as e:
         print(f"Error getting browser stats: {e}")
         return []
@@ -1175,22 +1216,14 @@ def get_os_stats():
     try:
         conn = sqlite3.connect(get_db_path())
         c = conn.cursor()
-        
-        # Check if operating_system column exists
-        c.execute("PRAGMA table_info(clicks)")
-        columns = [column[1] for column in c.fetchall()]
-        
-        if 'operating_system' in columns:
-            c.execute("""
-                SELECT operating_system, COUNT(*) as count 
-                FROM clicks 
-                WHERE operating_system != 'Unknown'
-                GROUP BY operating_system 
-                ORDER BY count DESC
-            """)
-            return c.fetchall()
-        else:
-            return []
+        c.execute("""
+            SELECT operating_system, COUNT(*) as count 
+            FROM clicks 
+            WHERE operating_system != 'Unknown'
+            GROUP BY operating_system 
+            ORDER BY count DESC
+        """)
+        return c.fetchall()
     except Exception as e:
         print(f"Error getting OS stats: {e}")
         return []
@@ -1223,44 +1256,13 @@ def get_recent_clicks(limit=10):
     try:
         conn = sqlite3.connect(get_db_path())
         c = conn.cursor()
-        
-        # Check which columns exist
-        c.execute("PRAGMA table_info(clicks)")
-        columns = [column[1] for column in c.fetchall()]
-        
-        # Build query based on existing columns
-        if all(col in columns for col in ['city', 'device_type', 'browser', 'operating_system']):
-            c.execute("""
-                SELECT short_code, click_time, country, city, device_type, browser, operating_system
-                FROM clicks 
-                ORDER BY click_time DESC 
-                LIMIT ?
-            """, (limit,))
-            return c.fetchall()
-        elif 'city' in columns and 'device_type' in columns:
-            c.execute("""
-                SELECT short_code, click_time, country, city, device_type, browser, 'Unknown'
-                FROM clicks 
-                ORDER BY click_time DESC 
-                LIMIT ?
-            """, (limit,))
-            return c.fetchall()
-        elif 'city' in columns:
-            c.execute("""
-                SELECT short_code, click_time, country, city, 'Unknown', 'Unknown', 'Unknown'
-                FROM clicks 
-                ORDER BY click_time DESC 
-                LIMIT ?
-            """, (limit,))
-            return c.fetchall()
-        else:
-            c.execute("""
-                SELECT short_code, click_time, country, 'Unknown', 'Unknown', 'Unknown', 'Unknown'
-                FROM clicks 
-                ORDER BY click_time DESC 
-                LIMIT ?
-            """, (limit,))
-            return c.fetchall()
+        c.execute("""
+            SELECT short_code, click_time, country, city, device_type, browser, operating_system
+            FROM clicks 
+            ORDER BY click_time DESC 
+            LIMIT ?
+        """, (limit,))
+        return c.fetchall()
     except Exception as e:
         print(f"Error getting recent clicks: {e}")
         return []
@@ -1374,13 +1376,28 @@ def add_utm_parameters(base_url, utm_params):
     return final_url
 
 # ============================================================================
-# REDIRECT HANDLER
+# REDIRECT HANDLER - FIXED TO PRESERVE UTM PARAMS
 # ============================================================================
 # Check if this is a redirect request
 query_params = st.query_params
-if 'go' in query_params:
-    short_code = query_params['go']
-    
+try:
+    # Try to get from query params directly
+    if 'go' in st.query_params:
+        short_code = st.query_params['go']
+    else:
+        # Check if there's a URL parameter in the path
+        import re
+        path = st.request.path if hasattr(st, 'request') else ''
+        match = re.search(r'\?go=([^&]+)', path)
+        if match:
+            short_code = match.group(1)
+        else:
+            short_code = None
+except Exception as e:
+    print(f"Error getting query params: {e}")
+    short_code = None
+
+if short_code:
     # Get the original URL
     original_url = get_link(short_code)
     
@@ -1388,13 +1405,13 @@ if 'go' in query_params:
         # Record the click
         click_recorded = record_click(short_code)
         
-        # Enhanced HTML redirect page
+        # HTML redirect page with immediate redirect
         html = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <title>Redirecting - SmartLink</title>
-            <meta http-equiv="refresh" content="1; url={original_url}">
+            <meta http-equiv="refresh" content="0; url={original_url}">
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
             <style>
                 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -1406,109 +1423,42 @@ if 'go' in query_params:
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    position: relative;
-                    overflow: hidden;
-                }}
-                .background-glow {{
-                    position: absolute;
-                    width: 600px;
-                    height: 600px;
-                    background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%);
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    z-index: 0;
                 }}
                 .container {{
                     text-align: center;
                     padding: 2rem;
-                    max-width: 600px;
-                    position: relative;
-                    z-index: 1;
                 }}
-                .card {{
-                    background: rgba(26, 35, 50, 0.85);
-                    backdrop-filter: blur(20px);
-                    padding: 2.5rem;
-                    border-radius: 32px;
-                    border: 1px solid rgba(59, 130, 246, 0.3);
-                    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5), 0 0 30px rgba(59, 130, 246, 0.2);
-                }}
-                h1 {{
-                    font-size: 2.8rem;
-                    margin: 0 0 0.5rem;
-                    background: linear-gradient(135deg, #60a5fa, #3b82f6, #2563eb);
-                    -webkit-background-clip: text;
-                    -webkit-text-fill-color: transparent;
-                    font-weight: 800;
-                }}
-                .loader-container {{ margin: 1.5rem 0; }}
                 .loader {{
-                    width: 50px;
-                    height: 50px;
+                    width: 40px;
+                    height: 40px;
                     border: 3px solid rgba(59, 130, 246, 0.2);
                     border-top: 3px solid #3b82f6;
-                    border-right: 3px solid #60a5fa;
                     border-radius: 50%;
                     animation: spin 0.8s linear infinite;
-                    margin: 0 auto;
+                    margin: 1rem auto;
                 }}
                 @keyframes spin {{
                     0% {{ transform: rotate(0deg); }}
                     100% {{ transform: rotate(360deg); }}
                 }}
-                .success {{
-                    color: #10b981;
-                    font-size: 1rem;
-                    margin: 1rem 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 0.5rem;
+                a {{
+                    color: #60a5fa;
+                    text-decoration: none;
                 }}
-                .destination {{
-                    background: rgba(59, 130, 246, 0.1);
-                    border: 1px solid rgba(59, 130, 246, 0.3);
-                    border-radius: 16px;
-                    padding: 1rem;
-                    margin: 1.5rem 0;
-                    word-break: break-all;
-                    font-size: 0.85rem;
-                    color: #94a3b8;
-                }}
-                .timer {{ color: #60a5fa; font-weight: 700; font-size: 1.2rem; }}
-                .footer-text {{ margin-top: 1.5rem; color: #6b7280; font-size: 0.75rem; }}
             </style>
         </head>
         <body>
-            <div class="background-glow"></div>
             <div class="container">
-                <div class="card">
-                    <h1>SmartLink</h1>
-                    <div class="loader-container"><div class="loader"></div></div>
-                    <h2 style="margin-bottom: 0.5rem; font-size: 1.3rem;">Redirecting you...</h2>
-                    <div class="success">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M20 6L9 17L4 12" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        Click tracked successfully
-                    </div>
-                    <div class="destination">
-                        <small>Destination:</small><br>
-                        <strong>{original_url[:80]}{'...' if len(original_url) > 80 else ''}</strong>
-                    </div>
-                    <p>You'll be redirected in <span class="timer">1</span> second</p>
-                    <div class="footer-text">
-                        <p>⚡ Real-time analytics • Secure & reliable</p>
-                    </div>
-                </div>
+                <h1 style="background: linear-gradient(135deg, #60a5fa, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">SmartLink</h1>
+                <div class="loader"></div>
+                <p>Redirecting you to your destination...</p>
+                <p style="font-size: 0.8rem; color: #6b7280; margin-top: 1rem;">
+                    If you are not redirected automatically, 
+                    <a href="{original_url}">click here</a>
+                </p>
             </div>
             <script>
-                let timer = 1;
-                const interval = setInterval(() => {{
-                    timer -= 1;
-                    if (timer <= 0) clearInterval(interval);
-                }}, 1000);
+                window.location.href = "{original_url}";
             </script>
         </body>
         </html>
@@ -1516,14 +1466,14 @@ if 'go' in query_params:
         st.markdown(html, unsafe_allow_html=True)
         st.stop()
     else:
-        # Enhanced error page
+        # 404 error page
         st.markdown(f"""
-        <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #1a2332, #111827); border-radius: 24px; border: 1px solid #ef4444;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">❌</div>
+        <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #1a2332, #111827); border-radius: 24px; border: 1px solid #ef4444; margin: 2rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">🔗</div>
             <h1 style="color: #ef4444; font-size: 2rem;">404 - Link Not Found</h1>
             <h2 style="color: #f3f4f6; margin: 1rem 0; font-size: 1.2rem;">The short link '<strong style="color: #60a5fa;">{short_code}</strong>' doesn't exist</h2>
             <p style="color: #9ca3af; margin-bottom: 2rem;">It may have been removed or the code is incorrect.</p>
-            <a href="/" style="display: inline-block; padding: 0.8rem 2rem; background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; transition: all 0.3s ease;">← Back to Home</a>
+            <a href="/" style="display: inline-block; padding: 0.8rem 2rem; background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; text-decoration: none; border-radius: 12px; font-weight: 600;">← Back to Home</a>
         </div>
         """, unsafe_allow_html=True)
         st.stop()
@@ -1540,7 +1490,6 @@ st.markdown('<p class="sub-title">Professional URL Shortener with Real-time Anal
 base_url = st.get_option('server.baseUrlPath')
 if not base_url or base_url == '/':
     base_url = ''
-    # Change this line to your deployed app URL
     app_domain = "https://smartlinkapp.streamlit.app"
 else:
     app_domain = base_url
@@ -1705,7 +1654,7 @@ with left_col:
                 if check_link_exists(short_code):
                     st.error(f"❌ Code '{short_code}' is already taken. Try another one.")
                 else:
-                    # Create link
+                    # Create link - store the URL with UTM parameters
                     if create_link(short_code, final_url):
                         # Construct full URL (THIS IS THE SHORTENED LINK)
                         full_url = f"{app_domain}/?go={short_code}"
