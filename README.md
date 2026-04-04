@@ -7,8 +7,6 @@
 
 A professional, feature-rich URL shortener with real-time analytics, geographic tracking, device detection, and UTM parameter support. Built with Streamlit and SQLite.
 
-![SmartLink Demo](https://via.placeholder.com/800x400?text=SmartLink+URL+Shortener+Demo)
-
 ## ✨ Features
 
 - **🔗 URL Shortening** - Create short, memorable links from long URLs
@@ -37,7 +35,6 @@ A professional, feature-rich URL shortener with real-time analytics, geographic 
 - [UTM Tracking](#utm-tracking)
 - [Database Schema](#database-schema)
 - [Technologies Used](#technologies-used)
-- [Screenshots](#screenshots)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -46,7 +43,7 @@ A professional, feature-rich URL shortener with real-time analytics, geographic 
 ### Prerequisites
 
 - Python 3.9 or higher
-- pip (Python package manager)
+- Python package manager (pip comes with Python)
 
 ### Step 1: Clone the Repository
 
@@ -70,26 +67,40 @@ source venv/bin/activate
 ### Step 3: Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+python -m pip install streamlit pandas plotly requests
+```
+
+Or using requirements.txt:
+
+```bash
+python -m pip install -r requirements.txt
 ```
 
 ### Step 4: Run the Application
 
 ```bash
-streamlit run app.py
+python -m streamlit run app.py
 ```
 
 The app will open at `http://localhost:8501`
 
 ## 💻 Local Development
 
-### Requirements.txt
+### Requirements
+
+Create a `requirements.txt` file:
 
 ```txt
 streamlit>=1.28.0
 pandas>=2.0.0
 plotly>=5.17.0
 requests>=2.31.0
+```
+
+Then install using:
+
+```bash
+python -m pip install -r requirements.txt
 ```
 
 ### Environment Variables
@@ -114,33 +125,6 @@ No environment variables are required for local development. The app uses:
 6. Click "Deploy"
 
 Your app will be live at: **https://smartlinkapp.streamlit.app/**
-
-### Deploy to Render
-
-```yaml
-# render.yaml
-services:
-  - type: web
-    name: smartlink
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.9.0
-```
-
-### Deploy to Heroku
-
-```bash
-# Create Procfile
-web: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
-
-# Deploy
-heroku create your-app-name
-git push heroku main
-heroku open
-```
 
 ## 📖 Usage Guide
 
@@ -255,20 +239,6 @@ CREATE TABLE clicks (
 - **Styling**: Custom CSS, Google Fonts
 - **Language**: Python 3.9+
 
-## 📸 Screenshots
-
-### Home Page
-![Home Page](https://via.placeholder.com/800x400?text=SmartLink+Home+Page)
-
-### Create Short Link
-![Create Link](https://via.placeholder.com/800x400?text=Create+Short+Link)
-
-### Analytics Dashboard
-![Analytics](https://via.placeholder.com/800x400?text=Analytics+Dashboard)
-
-### Geographic Tracking
-![Geography](https://via.placeholder.com/800x400?text=Geographic+Tracking)
-
 ## 🤝 Contributing
 
 Contributions are welcome! Here's how you can help:
@@ -291,10 +261,10 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
-# Run tests (if available)
-streamlit run app.py
+# Run the app
+python -m streamlit run app.py
 ```
 
 ## 📝 License
@@ -331,7 +301,7 @@ The SQLite database is ephemeral on Streamlit Cloud. For persistent storage, con
 
 1. **Supabase** (Recommended)
 ```python
-# Install: pip install supabase
+# Install: python -m pip install supabase
 from supabase import create_client
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 ```
