@@ -1537,12 +1537,26 @@ st.markdown('<h1 class="main-title">🔗 SmartLink</h1>', unsafe_allow_html=True
 st.markdown('<p class="sub-title">Professional URL Shortener with Real-time Analytics • Track every click with precision</p>', unsafe_allow_html=True)
 
 # Get base URL for link construction
+# Get the current domain from browser
+try:
+    # Check if running on Streamlit Cloud
+    if os.environ.get('STREAMLIT_SHARING_MODE') or os.environ.get('STREAMLIT_SERVER_ADDRESS'):
+        # Get the host from the browser
+        host = st.get_option('browser.serverAddress')
+        # Use HTTPS for Streamlit Cloud
+        if host and host != 'localhost':
+            app_domain = f"https://{host}"
+        else:
+            app_domain = "http://localhost:8501"
+    else:
+        # Local development
+        app_domain = "http://localhost:8501"
+except:
+    app_domain = "http://localhost:8501"
+
+# Override if baseUrlPath is set
 base_url = st.get_option('server.baseUrlPath')
-if not base_url or base_url == '/':
-    base_url = ''
-    # SET THIS TO EMPTY STRING - NOT localhost!
-    app_domain = ""
-else:
+if base_url and base_url != '/' and base_url != '':
     app_domain = base_url
 
 # Get stats for display
