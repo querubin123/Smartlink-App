@@ -1,8 +1,9 @@
 # 🔗 SmartLink - Professional URL Shortener & Analytics
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-url.streamlit.app)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://smartlinkapp.streamlit.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Smartlink--App-blue)](https://github.com/querubin123/Smartlink-App)
 
 A professional, feature-rich URL shortener with real-time analytics, geographic tracking, device detection, and UTM parameter support. Built with Streamlit and SQLite.
 
@@ -24,7 +25,7 @@ A professional, feature-rich URL shortener with real-time analytics, geographic 
 
 ## 🚀 Live Demo
 
-[View Live Demo](https://your-app-url.streamlit.app)
+**[View Live Demo](https://smartlinkapp.streamlit.app/)** - Try the app now!
 
 ## 📋 Table of Contents
 
@@ -112,10 +113,12 @@ No environment variables are required for local development. The app uses:
    - Python version: 3.9+
 6. Click "Deploy"
 
+Your app will be live at: **https://smartlinkapp.streamlit.app/**
+
 ### Deploy to Render
 
-```bash
-# Create render.yaml
+```yaml
+# render.yaml
 services:
   - type: web
     name: smartlink
@@ -153,8 +156,8 @@ heroku open
 
 ```
 Original URL: https://github.com/querubin123/Smartlink-App
-Short URL: http://localhost:8501/?go=abc123
-Custom Short URL: http://localhost:8501/?go=my-project
+Short URL: https://smartlinkapp.streamlit.app/?go=abc123
+Custom Short URL: https://smartlinkapp.streamlit.app/?go=my-project
 ```
 
 ### Tracking Analytics
@@ -205,7 +208,7 @@ Track marketing campaigns with UTM parameters:
 ```
 Original: https://mywebsite.com/product
 With UTM: https://mywebsite.com/product?utm_source=facebook&utm_medium=social&utm_campaign=summer-sale
-Shortened: http://localhost:8501/?go=summer2024
+Shortened: https://smartlinkapp.streamlit.app/?go=summer2024
 ```
 
 ## 🗄️ Database Schema
@@ -255,7 +258,7 @@ CREATE TABLE clicks (
 ## 📸 Screenshots
 
 ### Home Page
-![Home Page](https://via.placeholder.com/800x400?text=Home+Page)
+![Home Page](https://via.placeholder.com/800x400?text=SmartLink+Home+Page)
 
 ### Create Short Link
 ![Create Link](https://via.placeholder.com/800x400?text=Create+Short+Link)
@@ -300,9 +303,11 @@ Distributed under the MIT License. See `LICENSE` file for more information.
 
 ## 📧 Contact
 
-Your Name - [@yourtwitter](https://twitter.com/yourtwitter) - email@example.com
+GitHub: [@querubin123](https://github.com/querubin123)
 
 Project Link: [https://github.com/querubin123/Smartlink-App](https://github.com/querubin123/Smartlink-App)
+
+Live Demo: [https://smartlinkapp.streamlit.app/](https://smartlinkapp.streamlit.app/)
 
 ## 🙏 Acknowledgments
 
@@ -314,7 +319,7 @@ Project Link: [https://github.com/querubin123/Smartlink-App](https://github.com/
 
 ## ⭐ Show your support
 
-Give a ⭐️ if this project helped you!
+Give a ⭐️ on [GitHub](https://github.com/querubin123/Smartlink-App) if this project helped you!
 
 ---
 
@@ -355,15 +360,8 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 **Made with ❤️ for the Philippines 🇵🇭**
 
 *SmartLink - Shorten, Track, Analyze*
-```
 
-This README includes:
-- Project overview and features
-- Installation instructions
-- Deployment guides for multiple platforms
-- Usage examples
-- Database schema documentation
-- UTM tracking guide
-- Contributing guidelines
-- Production notes
+**Live App:** [https://smartlinkapp.streamlit.app/](https://smartlinkapp.streamlit.app/)
+**GitHub Repo:** [https://github.com/querubin123/Smartlink-App](https://github.com/querubin123/Smartlink-App)
+```
 
