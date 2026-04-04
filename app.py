@@ -1537,36 +1537,12 @@ st.markdown('<h1 class="main-title">🔗 SmartLink</h1>', unsafe_allow_html=True
 st.markdown('<p class="sub-title">Professional URL Shortener with Real-time Analytics • Track every click with precision</p>', unsafe_allow_html=True)
 
 # Get base URL for link construction
-# Get the current base URL from Streamlit's context
-try:
-    # This works on both local and deployed environments
-    from streamlit.web.server import Server
-    from streamlit.runtime.scriptrunner import get_script_run_ctx
-    
-    ctx = get_script_run_ctx()
-    if ctx and hasattr(ctx, 'session_id'):
-        # For deployed environment
-        host = st.get_option('browser.serverAddress')
-        port = st.get_option('browser.serverPort')
-        
-        # Determine protocol
-        import os
-        if os.environ.get('STREAMLIT_SERVER_PROTOCOL') == 'https' or str(port) == '443':
-            protocol = 'https'
-        else:
-            protocol = 'http'
-        
-        app_domain = f"{protocol}://{host}"
-        if port not in [80, 443, None]:
-            app_domain = f"{protocol}://{host}:{port}"
-    else:
-        app_domain = "http://localhost:8501"
-except:
-    app_domain = "http://localhost:8501"
-
-# Check for custom base URL path
 base_url = st.get_option('server.baseUrlPath')
-if base_url and base_url != '/' and base_url != '':
+if not base_url or base_url == '/':
+    base_url = ''
+    # SET THIS TO EMPTY STRING - NOT localhost!
+    app_domain = ""
+else:
     app_domain = base_url
 
 # Get stats for display

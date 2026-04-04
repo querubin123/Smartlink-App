@@ -1,6 +1,3 @@
-Here's a professional README.md for your SmartLink URL Shortener:
-
-```markdown
 # 🔗 SmartLink - Professional URL Shortener & Analytics
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-url.streamlit.app)
