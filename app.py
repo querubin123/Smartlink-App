@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_geolocation import streamlit_geolocation
 import sqlite3
 import random
 import string
@@ -64,6 +65,10 @@ if 'success_final_url' not in st.session_state:
     st.session_state['success_final_url'] = ""
 if 'success_utm_params' not in st.session_state:
     st.session_state['success_utm_params'] = {}
+if 'browser_location' not in st.session_state:
+    st.session_state['browser_location'] = None
+if 'geolocation_permission_granted' not in st.session_state:
+    st.session_state['geolocation_permission_granted'] = False
 
 # ============================================================================
 # PROFESSIONAL MODERN DARK THEME CSS - ENHANCED UX
@@ -300,6 +305,43 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 0.8px;
         font-weight: 600;
+    }
+
+    /* Geolocation Card */
+    .geo-card {
+        background: linear-gradient(135deg, #1e2a3a, #1a2332);
+        border: 1px solid var(--primary);
+        border-radius: 16px;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+        transition: all 0.3s ease;
+    }
+    
+    .geo-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    }
+    
+    .geo-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: rgba(59, 130, 246, 0.15);
+        padding: 0.25rem 0.75rem;
+        border-radius: 30px;
+        font-size: 0.7rem;
+        color: var(--primary-light);
+    }
+    
+    .geo-location-text {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        margin: 0.25rem 0;
+    }
+    
+    .geo-location-value {
+        color: var(--text-primary);
+        font-weight: 500;
     }
 
     /* Button styling */
@@ -676,12 +718,67 @@ st.markdown("""
     .stSpinner > div {
         border-color: var(--primary) transparent transparent transparent !important;
     }
+    
+    /* Map container */
+    .map-container {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--primary);
+        margin-top: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================================
-# IMPROVED IP GEOLOCATION FUNCTIONS
+# IMPROVED GEOLOCATION FUNCTIONS - DUAL METHOD (Browser + IP)
 # ============================================================================
+
+def get_browser_geolocation():
+    """Get geolocation from browser using streamlit_geolocation"""
+    try:
+        location = streamlit_geolocation()
+        
+        if location and location != "No Location Info" and isinstance(location, dict):
+            if location.get("latitude") and location.get("longitude"):
+                st.session_state['browser_location'] = location
+                st.session_state['geolocation_permission_granted'] = True
+                return {
+                    "source": "browser",
+                    "latitude": location["latitude"],
+                    "longitude": location["longitude"],
+                    "accuracy": location.get("accuracy", "Unknown"),
+                    "country": get_country_from_coords(location["latitude"], location["longitude"]),
+                    "city": get_city_from_coords(location["latitude"], location["longitude"])
+                }
+    except Exception as e:
+        print(f"Browser geolocation error: {e}")
+    
+    return None
+
+def get_country_from_coords(lat, lon):
+    """Get country name from coordinates using reverse geocoding"""
+    try:
+        # Use OpenStreetMap Nominatim for reverse geocoding
+        url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+        response = requests.get(url, headers={'User-Agent': 'SmartLink URL Shortener'}, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('address', {}).get('country', 'Unknown')
+    except:
+        pass
+    return "Unknown"
+
+def get_city_from_coords(lat, lon):
+    """Get city name from coordinates using reverse geocoding"""
+    try:
+        url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+        response = requests.get(url, headers={'User-Agent': 'SmartLink URL Shortener'}, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('address', {}).get('city', data.get('address', {}).get('town', data.get('address', {}).get('village', 'Unknown')))
+    except:
+        pass
+    return "Unknown"
 
 def get_real_ip():
     """Try to get the real IP address of the visitor using multiple sources"""
@@ -715,137 +812,119 @@ def get_real_ip():
     
     return "127.0.0.1"
 
-def get_geolocation_from_ip(ip_address=None):
-    """Get detailed geolocation from IP address using multiple reliable APIs"""
-
+def get_geolocation_from_ip(ip_address):
+    """Get comprehensive geolocation from IP address using multiple APIs"""
+    
+    # Priority 1: Try ipapi.co (most reliable)
     try:
-        if ip_address is None:
-            ip_address = getattr(st.context, "ip_address", None)
+        response = requests.get(f"https://ipapi.co/{ip_address}/json/", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('country_name') and data.get('country_name') != 'None':
+                return {
+                    "country": data.get("country_name", "Unknown"),
+                    "city": data.get("city", "Unknown"),
+                    "region": data.get("region", "Unknown"),
+                    "lat": data.get("latitude", 0),
+                    "lon": data.get("longitude", 0),
+                    "isp": data.get("org", "Unknown"),
+                    "timezone": data.get("timezone", "Unknown"),
+                    "postal": data.get("postal", "Unknown"),
+                    "source": "ipapi.co"
+                }
     except:
-        ip_address = None
-
-    if not ip_address or ip_address in ["127.0.0.1", "localhost", "::1"]:
-        return {
-            "country": "Unknown",
-            "city": "Unknown",
-            "region": "Unknown",
-            "lat": 0,
-            "lon": 0,
-            "isp": "Unknown"
-        }
-
-    geo_apis = [
-        {
-            "url": f"http://ip-api.com/json/{ip_address}?fields=status,country,city,regionName,lat,lon,isp",
-            "parser": lambda d: {
-                "country": d.get("country", "Unknown"),
-                "city": d.get("city", "Unknown"),
-                "region": d.get("regionName", "Unknown"),
-                "lat": d.get("lat", 0),
-                "lon": d.get("lon", 0),
-                "isp": d.get("isp", "Unknown")
-            } if d.get("status") == "success" else None
-        },
-        {
-            "url": f"https://ipapi.co/{ip_address}/json/",
-            "parser": lambda d: {
-                "country": d.get("country_name", "Unknown"),
-                "city": d.get("city", "Unknown"),
-                "region": d.get("region", "Unknown"),
-                "lat": d.get("latitude", 0),
-                "lon": d.get("longitude", 0),
-                "isp": d.get("org", "Unknown")
-            } if d.get("country_name") else None
-        },
-        {
-            "url": f"https://ipwhois.io/json/{ip_address}",
-            "parser": lambda d: {
-                "country": d.get("country", "Unknown"),
-                "city": d.get("city", "Unknown"),
-                "region": d.get("region", "Unknown"),
-                "lat": float(d.get("latitude", 0)),
-                "lon": float(d.get("longitude", 0)),
-                "isp": d.get("isp", "Unknown")
-            } if d.get("success") != False and d.get("country") else None
-        }
-    ]
-
-    for api in geo_apis:
-        try:
-            response = requests.get(api["url"], timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                result = api["parser"](data)
-                if result and result["country"] != "Unknown":
-                    return result
-        except:
-            continue
-
+        pass
+    
+    # Priority 2: Try ip-api.com
+    try:
+        response = requests.get(f"http://ip-api.com/json/{ip_address}?fields=status,country,city,regionName,lat,lon,isp,timezone", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("status") == "success":
+                return {
+                    "country": data.get("country", "Unknown"),
+                    "city": data.get("city", "Unknown"),
+                    "region": data.get("regionName", "Unknown"),
+                    "lat": data.get("lat", 0),
+                    "lon": data.get("lon", 0),
+                    "isp": data.get("isp", "Unknown"),
+                    "timezone": data.get("timezone", "Unknown"),
+                    "postal": "Unknown",
+                    "source": "ip-api.com"
+                }
+    except:
+        pass
+    
+    # Priority 3: Try ipwhois.io
+    try:
+        response = requests.get(f"https://ipwhois.io/json/{ip_address}", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("success") != False and data.get("country"):
+                return {
+                    "country": data.get("country", "Unknown"),
+                    "city": data.get("city", "Unknown"),
+                    "region": data.get("region", "Unknown"),
+                    "lat": float(data.get("latitude", 0)),
+                    "lon": float(data.get("longitude", 0)),
+                    "isp": data.get("isp", "Unknown"),
+                    "timezone": data.get("timezone", "Unknown"),
+                    "postal": data.get("postal", "Unknown"),
+                    "source": "ipwhois.io"
+                }
+    except:
+        pass
+    
+    # Final fallback
     return {
         "country": "Unknown",
         "city": "Unknown",
         "region": "Unknown",
         "lat": 0,
         "lon": 0,
-        "isp": "Unknown"
+        "isp": "Unknown",
+        "timezone": "Unknown",
+        "postal": "Unknown",
+        "source": "none"
     }
+
+def get_combined_geolocation():
+    """Get geolocation from both browser (if available) and IP, then combine for best accuracy"""
     
-    # Try multiple geolocation APIs
-    geo_apis = [
-        {
-            'url': f'http://ip-api.com/json/{ip_address}?fields=status,country,city,regionName,lat,lon,isp',
-            'parser': lambda d: {
-                'country': d.get('country', 'Unknown'),
-                'city': d.get('city', 'Unknown'),
-                'region': d.get('regionName', 'Unknown'),
-                'lat': d.get('lat', 0),
-                'lon': d.get('lon', 0),
-                'isp': d.get('isp', 'Unknown')
-            } if d.get('status') == 'success' else None
-        },
-        {
-            'url': f'https://ipapi.co/{ip_address}/json/',
-            'parser': lambda d: {
-                'country': d.get('country_name', 'Unknown'),
-                'city': d.get('city', 'Unknown'),
-                'region': d.get('region', 'Unknown'),
-                'lat': d.get('latitude', 0),
-                'lon': d.get('longitude', 0),
-                'isp': d.get('org', 'Unknown')
-            } if d.get('country_name') else None
-        },
-        {
-            'url': f'https://ipwhois.io/json/{ip_address}',
-            'parser': lambda d: {
-                'country': d.get('country', 'Unknown'),
-                'city': d.get('city', 'Unknown'),
-                'region': d.get('region', 'Unknown'),
-                'lat': float(d.get('latitude', 0)),
-                'lon': float(d.get('longitude', 0)),
-                'isp': d.get('isp', 'Unknown')
-            } if d.get('success') != False and d.get('country') else None
+    # Try browser geolocation first (most accurate)
+    browser_geo = get_browser_geolocation()
+    
+    # Always get IP geolocation as fallback
+    ip_address = get_real_ip()
+    ip_geo = get_geolocation_from_ip(ip_address)
+    
+    # If browser geolocation is available and accurate, use it with IP as backup
+    if browser_geo and browser_geo.get("latitude") and browser_geo.get("latitude") != 0:
+        return {
+            "country": browser_geo.get("country", ip_geo.get("country", "Unknown")),
+            "city": browser_geo.get("city", ip_geo.get("city", "Unknown")),
+            "region": ip_geo.get("region", "Unknown"),
+            "lat": browser_geo["latitude"],
+            "lon": browser_geo["longitude"],
+            "isp": ip_geo.get("isp", "Unknown"),
+            "timezone": ip_geo.get("timezone", "Unknown"),
+            "postal": ip_geo.get("postal", "Unknown"),
+            "source": "browser_gps",
+            "ip_address": ip_address
         }
-    ]
     
-    for api in geo_apis:
-        try:
-            response = requests.get(api['url'], timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                result = api['parser'](data)
-                if result and result['country'] != 'Unknown':
-                    return result
-        except Exception as e:
-            continue
-    
-    # Final fallback
+    # Otherwise use IP geolocation
     return {
-        'country': 'Unknown',
-        'city': 'Unknown',
-        'region': 'Unknown',
-        'lat': 0,
-        'lon': 0,
-        'isp': 'Unknown'
+        "country": ip_geo.get("country", "Unknown"),
+        "city": ip_geo.get("city", "Unknown"),
+        "region": ip_geo.get("region", "Unknown"),
+        "lat": ip_geo.get("lat", 0),
+        "lon": ip_geo.get("lon", 0),
+        "isp": ip_geo.get("isp", "Unknown"),
+        "timezone": ip_geo.get("timezone", "Unknown"),
+        "postal": ip_geo.get("postal", "Unknown"),
+        "source": ip_geo.get("source", "ip_detection"),
+        "ip_address": ip_address
     }
 
 def get_client_info():
@@ -934,7 +1013,7 @@ def init_db():
             last_clicked TEXT
         )''')
         
-        # Create clicks table with all columns
+        # Create clicks table with all columns including geolocation source
         c.execute('''CREATE TABLE IF NOT EXISTS clicks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             short_code TEXT,
@@ -951,13 +1030,17 @@ def init_db():
             browser_version TEXT DEFAULT 'Unknown',
             operating_system TEXT DEFAULT 'Unknown',
             referer TEXT DEFAULT 'Direct',
-            user_agent TEXT DEFAULT 'Unknown'
+            user_agent TEXT DEFAULT 'Unknown',
+            timezone TEXT DEFAULT 'Unknown',
+            postal_code TEXT DEFAULT 'Unknown',
+            geo_source TEXT DEFAULT 'ip_detection'
         )''')
         
         # Create indexes for better performance
         c.execute('''CREATE INDEX IF NOT EXISTS idx_clicks_short_code ON clicks(short_code)''')
         c.execute('''CREATE INDEX IF NOT EXISTS idx_clicks_click_time ON clicks(click_time)''')
         c.execute('''CREATE INDEX IF NOT EXISTS idx_clicks_country ON clicks(country)''')
+        c.execute('''CREATE INDEX IF NOT EXISTS idx_clicks_geo_source ON clicks(geo_source)''')
         
         conn.commit()
     except Exception as e:
@@ -989,7 +1072,10 @@ def check_and_update_schema():
             'browser_version': 'TEXT DEFAULT "Unknown"',
             'operating_system': 'TEXT DEFAULT "Unknown"',
             'referer': 'TEXT DEFAULT "Direct"',
-            'user_agent': 'TEXT DEFAULT "Unknown"'
+            'user_agent': 'TEXT DEFAULT "Unknown"',
+            'timezone': 'TEXT DEFAULT "Unknown"',
+            'postal_code': 'TEXT DEFAULT "Unknown"',
+            'geo_source': 'TEXT DEFAULT "ip_detection"'
         }
         
         # Add missing columns
@@ -1100,7 +1186,7 @@ def check_link_exists(short_code):
             conn.close()
 
 def record_click(short_code):
-    """Record a click for a short code with REAL analytics data"""
+    """Record a click for a short code with REAL analytics data using combined geolocation"""
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
@@ -1108,9 +1194,8 @@ def record_click(short_code):
         
         click_time = datetime.now().isoformat()
         
-        # Get REAL IP and geolocation
-        ip_address = get_real_ip()
-        geo_data = get_geolocation_from_ip(ip_address)
+        # Get combined geolocation (browser + IP)
+        geo_data = get_combined_geolocation()
         
         # Get REAL client info
         client_info = get_client_info()
@@ -1122,19 +1207,22 @@ def record_click(short_code):
         except:
             pass
         
-        # Insert click record
+        # Insert click record with enhanced data
         c.execute("""
             INSERT INTO clicks (
                 short_code, click_time, ip_address, 
                 country, city, region, latitude, longitude, isp,
-                device_type, browser, operating_system, referer, user_agent
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                device_type, browser, operating_system, referer, user_agent,
+                timezone, postal_code, geo_source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            short_code, click_time, ip_address,
+            short_code, click_time, geo_data.get('ip_address', 'Unknown'),
             geo_data['country'], geo_data['city'], geo_data['region'], 
             geo_data['lat'], geo_data['lon'], geo_data.get('isp', 'Unknown'),
             client_info['device'], client_info['browser'], client_info['operating_system'],
-            referer, client_info['user_agent']
+            referer, client_info['user_agent'],
+            geo_data.get('timezone', 'Unknown'), geo_data.get('postal', 'Unknown'),
+            geo_data.get('source', 'ip_detection')
         ))
         
         # Update click count and last clicked
@@ -1208,10 +1296,14 @@ def get_stats():
         c.execute("SELECT COUNT(*) FROM clicks WHERE click_time >= ?", (yesterday,))
         clicks_24h = c.fetchone()[0]
         
-        return total_links, total_clicks, active_links, total_countries, clicks_24h
+        # GPS vs IP tracking stats
+        c.execute("SELECT COUNT(*) FROM clicks WHERE geo_source = 'browser_gps'")
+        gps_clicks = c.fetchone()[0]
+        
+        return total_links, total_clicks, active_links, total_countries, clicks_24h, gps_clicks
     except Exception as e:
         print(f"Error getting stats: {e}")
-        return 0, 0, 0, 0, 0
+        return 0, 0, 0, 0, 0, 0
     finally:
         if conn:
             conn.close()
@@ -1320,13 +1412,13 @@ def get_all_links():
             conn.close()
 
 def get_recent_clicks(limit=10):
-    """Get recent clicks with all details"""
+    """Get recent clicks with all details including geolocation source"""
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
         c = conn.cursor()
         c.execute("""
-            SELECT short_code, click_time, country, city, device_type, browser, operating_system
+            SELECT short_code, click_time, country, city, device_type, browser, operating_system, geo_source, latitude, longitude
             FROM clicks 
             ORDER BY click_time DESC 
             LIMIT ?
@@ -1410,6 +1502,26 @@ def get_hourly_stats():
         return c.fetchall()
     except Exception as e:
         print(f"Error getting hourly stats: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def get_geo_source_stats():
+    """Get statistics on geolocation sources (browser GPS vs IP detection)"""
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        c = conn.cursor()
+        c.execute("""
+            SELECT geo_source, COUNT(*) as count 
+            FROM clicks 
+            GROUP BY geo_source
+            ORDER BY count DESC
+        """)
+        return c.fetchall()
+    except Exception as e:
+        print(f"Error getting geo source stats: {e}")
         return []
     finally:
         if conn:
@@ -1658,9 +1770,9 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # Get stats for display
-total_links, total_clicks, active_links, total_countries, clicks_24h = get_stats()
+total_links, total_clicks, active_links, total_countries, clicks_24h, gps_clicks = get_stats()
 
-# Professional status bar - Enhanced
+# Professional status bar - Enhanced with geolocation info
 st.markdown(f"""
 <div style="display: flex; justify-content: center; gap: 0.8rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
     <span class="status-badge">⚡ Real-time Analytics</span>
@@ -1668,8 +1780,74 @@ st.markdown(f"""
     <span class="status-badge">🔒 Secure & Reliable</span>
     <span class="status-badge">📊 UTM Tracking</span>
     <span class="status-badge">🌍 {total_countries} Countries</span>
+    <span class="status-badge">📍 {gps_clicks} GPS-tracked</span>
 </div>
 """, unsafe_allow_html=True)
+
+# ============================================================================
+# GEOLOCATION INFO CARD - Shows current user's location
+# ============================================================================
+
+# Get current user's geolocation for display
+current_geo = get_combined_geolocation()
+
+if current_geo and current_geo.get('country') != 'Unknown':
+    flag = "🌍"
+    if "United States" in current_geo['country']:
+        flag = "🇺🇸"
+    elif "Philippines" in current_geo['country']:
+        flag = "🇵🇭"
+    elif "United Kingdom" in current_geo['country']:
+        flag = "🇬🇧"
+    elif "Germany" in current_geo['country']:
+        flag = "🇩🇪"
+    elif "France" in current_geo['country']:
+        flag = "🇫🇷"
+    elif "Japan" in current_geo['country']:
+        flag = "🇯🇵"
+    elif "Canada" in current_geo['country']:
+        flag = "🇨🇦"
+    elif "Australia" in current_geo['country']:
+        flag = "🇦🇺"
+    elif "India" in current_geo['country']:
+        flag = "🇮🇳"
+    
+    source_badge = "🎯 GPS" if current_geo.get('source') == 'browser_gps' else "🌐 IP Detection"
+    
+    st.markdown(f"""
+    <div class="geo-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 1.2rem;">{flag}</span>
+                <span style="font-weight: 600; color: #f3f4f6;">Your Location</span>
+            </div>
+            <span class="geo-badge">{source_badge}</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem;">
+            <div>
+                <div class="geo-location-text">📍 Country</div>
+                <div class="geo-location-value">{current_geo.get('country', 'Unknown')}</div>
+            </div>
+            <div>
+                <div class="geo-location-text">🏙️ City</div>
+                <div class="geo-location-value">{current_geo.get('city', 'Unknown')}</div>
+            </div>
+            <div>
+                <div class="geo-location-text">🌐 ISP</div>
+                <div class="geo-location-value">{current_geo.get('isp', 'Unknown')[:30]}</div>
+            </div>
+            <div>
+                <div class="geo-location-text">⏰ Timezone</div>
+                <div class="geo-location-value">{current_geo.get('timezone', 'Unknown')}</div>
+            </div>
+        </div>
+        <div style="margin-top: 0.5rem; font-size: 0.65rem; color: #6b7280; text-align: center;">
+            {current_geo.get('source', 'IP detection')} • {current_geo.get('ip_address', 'Unknown IP')}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+elif current_geo:
+    st.info("📍 Click 'Allow' when prompted to share your location for more accurate analytics! This helps track where your audience is coming from.", icon="🌍")
 
 # Main two-column layout with professional spacing
 left_col, right_col = st.columns([1.6, 1], gap="large")
@@ -1996,6 +2174,27 @@ with right_col:
     </div>
     """, unsafe_allow_html=True)
     
+    # Geolocation Source Stats
+    geo_source_stats = get_geo_source_stats()
+    if geo_source_stats:
+        st.markdown("<div style='margin: 0.75rem 0 0.5rem 0;'><span style='font-size: 0.8rem; font-weight: 700; color: #e5e7eb;'>📍 Tracking Methods</span></div>", unsafe_allow_html=True)
+        
+        total = sum(count for _, count in geo_source_stats)
+        for source, count in geo_source_stats:
+            percentage = (count / total) * 100 if total > 0 else 0
+            source_name = "🎯 GPS (Browser)" if source == "browser_gps" else "🌐 IP Detection"
+            color = "#10b981" if source == "browser_gps" else "#3b82f6"
+            
+            st.markdown(f"""
+            <div style="margin: 0.4rem 0;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 0.25rem;">
+                    <span style="color: #e5e7eb;">{source_name}</span>
+                    <span style="color: {color}; font-weight: 700;">{count} ({percentage:.1f}%)</span>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" style="width: {percentage}%; background: {color};"></div></div>
+            </div>
+            """, unsafe_allow_html=True)
+    
     # Enhanced Top Countries Section
     st.markdown("<div style='margin: 1rem 0 0.5rem 0;'><span style='font-size: 0.8rem; font-weight: 700; color: #e5e7eb;'>🌍 Top Countries</span></div>", unsafe_allow_html=True)
     country_stats = get_country_stats()[:5]
@@ -2040,8 +2239,8 @@ with right_col:
     recent_clicks = get_recent_clicks(5)
     if recent_clicks:
         for click in recent_clicks[:5]:
-            if len(click) >= 3:
-                code, click_time_value, country = click[:3]
+            if len(click) >= 5:
+                code, click_time_value, country, city, device, browser, os, geo_source, lat, lon = click[:10]
                 try:
                     dt = datetime.fromisoformat(click_time_value)
                     time_str = dt.strftime("%H:%M")
@@ -2049,7 +2248,10 @@ with right_col:
                 except:
                     time_str = click_time_value[:5] if len(click_time_value) > 5 else click_time_value
                     date_str = "Today"
+                
                 flag = "🇺🇸" if "United States" in country else "🇵🇭" if "Philippines" in country else "🇬🇧" if "United Kingdom" in country else "🌍"
+                geo_icon = "🎯" if geo_source == "browser_gps" else "🌐"
+                
                 st.markdown(f"""
                 <div class="recent-click">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -2059,9 +2261,13 @@ with right_col:
                             <span style="color: #6b7280; font-size: 0.6rem; background: #2d3748; padding: 0.2rem 0.6rem; border-radius: 20px;">{time_str}</span>
                         </div>
                     </div>
-                    <div style="font-size: 0.7rem; margin-top: 0.3rem; display: flex; align-items: center; gap: 0.3rem;">
-                        <span style="font-size: 0.9rem;">{flag}</span>
-                        <span style="color: #9ca3af;">{country}</span>
+                    <div style="font-size: 0.7rem; margin-top: 0.3rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                        <span style="display: flex; align-items: center; gap: 0.2rem;"><span style="font-size: 0.9rem;">{flag}</span> <span style="color: #9ca3af;">{country}</span></span>
+                        {f'<span style="color: #6b7280;">•</span> <span style="color: #9ca3af;">{city[:20]}</span>' if city and city != 'Unknown' else ''}
+                        <span style="color: #6b7280;">•</span>
+                        <span style="display: flex; align-items: center; gap: 0.2rem;"><span>{geo_icon}</span> <span style="color: #9ca3af;">{device}</span></span>
+                        <span style="color: #6b7280;">•</span>
+                        <span style="color: #9ca3af;">{browser}</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -2150,7 +2356,7 @@ links = get_all_links()
 
 if links:
     # Create tabs for different views with enhanced styling
-    tab1, tab2, tab3, tab4 = st.tabs(["📈 Overview", "🌍 Geographic", "📱 Devices", "🔗 Link Details"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Overview", "🌍 Geographic", "📱 Devices", "📍 Tracking Methods", "🔗 Link Details"])
     
     with tab1:
         # Overview dashboard with compact charts
@@ -2350,6 +2556,67 @@ if links:
                 st.info("No browser data yet", icon="🌐")
     
     with tab4:
+        # Geolocation Tracking Methods Analytics
+        st.markdown("""
+        <div style="background: #1a2332; padding: 0.75rem; border-radius: 14px; border: 1px solid #2d3748; margin-bottom: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 1rem;">📍</span>
+                <span style="color: #f3f4f6; font-size: 0.85rem; font-weight: 600;">Tracking Method Analysis</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            geo_source_stats_tab = get_geo_source_stats()
+            if geo_source_stats_tab:
+                df_geo_source = pd.DataFrame(geo_source_stats_tab, columns=['Method', 'Count'])
+                fig = px.pie(df_geo_source, values='Count', names='Method', title='Geolocation Source', hole=0.3)
+                fig.update_layout(
+                    height=300,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='white', size=10),
+                    margin=dict(l=20, r=20, t=40, b=20)
+                )
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig, use_container_width=True, key="geo_source_pie_tab")
+                
+                # Rename for display
+                method_names = {
+                    'browser_gps': '🎯 GPS (Browser)',
+                    'ip_detection': '🌐 IP Detection'
+                }
+                st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+                for method, count in geo_source_stats_tab:
+                    method_display = method_names.get(method, method)
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(135deg, #1e2a3a, #1a2332); padding: 0.5rem; border-radius: 10px; margin: 0.3rem 0; border-left: 3px solid #3b82f6;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: #e5e7eb; font-size: 0.8rem;">{method_display}</span>
+                            <span style="color: #60a5fa; font-weight: 700;">{count} clicks</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No tracking method data available yet", icon="📍")
+        
+        with col2:
+            st.markdown("""
+            <div style="background: #1a2332; padding: 0.75rem; border-radius: 14px; border: 1px solid #2d3748;">
+                <div style="margin-bottom: 0.5rem;">
+                    <span style="color: #f3f4f6; font-size: 0.8rem; font-weight: 600;">📖 About Tracking Methods</span>
+                </div>
+                <div style="font-size: 0.7rem; color: #9ca3af; line-height: 1.5;">
+                    <p><strong style="color: #10b981;">🎯 GPS (Browser)</strong> - Most accurate location data from user's browser permission. Includes precise coordinates.</p>
+                    <p><strong style="color: #3b82f6;">🌐 IP Detection</strong> - Location based on IP address. Less accurate but works without user permission.</p>
+                    <p style="margin-top: 0.5rem;">Users are prompted to share their location when clicking links. GPS tracking provides city-level accuracy while IP detection gives country/region data.</p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with tab5:
         # Link details
         for idx, (code, url, clicks, created, last_clicked) in enumerate(links[:5]):
             # Format dates
@@ -2471,8 +2738,9 @@ st.markdown(f"""
         <div><span style="color: #10b981; font-weight: 800;">{total_clicks}</span> <span style="color: #6b7280;">Clicks</span></div>
         <div><span style="color: #f59e0b; font-weight: 800;">{total_countries}</span> <span style="color: #6b7280;">Countries</span></div>
         <div><span style="color: #ef4444; font-weight: 800;">{clicks_24h}</span> <span style="color: #6b7280;">Last 24h</span></div>
+        <div><span style="color: #8b5cf6; font-weight: 800;">{gps_clicks}</span> <span style="color: #6b7280;">GPS Tracked</span></div>
     </div>
-    <p style="font-size: 0.75rem;">🔗 SmartLink URL Shortener • {domain_display} • Real-time Analytics • UTM Tracking</p>
+    <p style="font-size: 0.75rem;">🔗 SmartLink URL Shortener • {domain_display} • Real-time Analytics • UTM Tracking • GPS Geolocation</p>
     <p style="color: #4b5563; font-size: 0.7rem;">© {current_year} SmartLink • Made with ❤️ for the Philippines 🇵🇭</p>
 </div>
 """, unsafe_allow_html=True)
