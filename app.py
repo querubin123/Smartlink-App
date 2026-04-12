@@ -715,34 +715,80 @@ def get_real_ip():
     
     return "127.0.0.1"
 
-def get_geolocation_from_ip(ip_address):
+def get_geolocation_from_ip(ip_address=None):
     """Get detailed geolocation from IP address using multiple reliable APIs"""
-    
-    # Skip localhost
-    if ip_address in ["127.0.0.1", "localhost", "::1"]:
-        # Try to get public IP first
+
+    try:
+        if ip_address is None:
+            ip_address = getattr(st.context, "ip_address", None)
+    except:
+        ip_address = None
+
+    if not ip_address or ip_address in ["127.0.0.1", "localhost", "::1"]:
+        return {
+            "country": "Unknown",
+            "city": "Unknown",
+            "region": "Unknown",
+            "lat": 0,
+            "lon": 0,
+            "isp": "Unknown"
+        }
+
+    geo_apis = [
+        {
+            "url": f"http://ip-api.com/json/{ip_address}?fields=status,country,city,regionName,lat,lon,isp",
+            "parser": lambda d: {
+                "country": d.get("country", "Unknown"),
+                "city": d.get("city", "Unknown"),
+                "region": d.get("regionName", "Unknown"),
+                "lat": d.get("lat", 0),
+                "lon": d.get("lon", 0),
+                "isp": d.get("isp", "Unknown")
+            } if d.get("status") == "success" else None
+        },
+        {
+            "url": f"https://ipapi.co/{ip_address}/json/",
+            "parser": lambda d: {
+                "country": d.get("country_name", "Unknown"),
+                "city": d.get("city", "Unknown"),
+                "region": d.get("region", "Unknown"),
+                "lat": d.get("latitude", 0),
+                "lon": d.get("longitude", 0),
+                "isp": d.get("org", "Unknown")
+            } if d.get("country_name") else None
+        },
+        {
+            "url": f"https://ipwhois.io/json/{ip_address}",
+            "parser": lambda d: {
+                "country": d.get("country", "Unknown"),
+                "city": d.get("city", "Unknown"),
+                "region": d.get("region", "Unknown"),
+                "lat": float(d.get("latitude", 0)),
+                "lon": float(d.get("longitude", 0)),
+                "isp": d.get("isp", "Unknown")
+            } if d.get("success") != False and d.get("country") else None
+        }
+    ]
+
+    for api in geo_apis:
         try:
-            response = requests.get('https://api.ipify.org?format=json', timeout=5)
+            response = requests.get(api["url"], timeout=5)
             if response.status_code == 200:
-                ip_address = response.json()['ip']
-            else:
-                return {
-                    'country': 'Unknown',
-                    'city': 'Unknown',
-                    'region': 'Unknown',
-                    'lat': 0,
-                    'lon': 0,
-                    'isp': 'Unknown'
-                }
+                data = response.json()
+                result = api["parser"](data)
+                if result and result["country"] != "Unknown":
+                    return result
         except:
-            return {
-                'country': 'Unknown',
-                'city': 'Unknown',
-                'region': 'Unknown',
-                'lat': 0,
-                'lon': 0,
-                'isp': 'Unknown'
-            }
+            continue
+
+    return {
+        "country": "Unknown",
+        "city": "Unknown",
+        "region": "Unknown",
+        "lat": 0,
+        "lon": 0,
+        "isp": "Unknown"
+    }
     
     # Try multiple geolocation APIs
     geo_apis = [
