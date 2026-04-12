@@ -23,39 +23,29 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ============================================================================
-# AUTOMATIC DOMAIN DETECTION - NO MANUAL CONFIGURATION NEEDED
-# ============================================================================
 def get_app_domain():
     """Automatically detect the correct domain for the app"""
-    
-    # Check if running on Streamlit Cloud
-    is_streamlit_cloud = os_module.getenv('STREAMLIT_SERVER_ADDRESS') is not None
-    
-    if is_streamlit_cloud:
-        # Get the app URL from environment or construct it
-        app_url = os_module.getenv('STREAMLIT_SERVER_ADDRESS', '')
-        if app_url:
-            # Extract domain from full URL if needed
-            if '://' in app_url:
-                domain = app_url.split('://')[1].split('/')[0]
-            else:
-                domain = app_url.split('/')[0]
-            return f"https://{domain}"
-        
-        # Fallback: try to get from request headers
-        try:
-            host = st.context.headers.get('Host', '')
-            if host:
-                protocol = 'https' if 'streamlit.app' in host else 'http'
-                return f"{protocol}://{host}"
-        except:
-            pass
-    
-    # Local development
+
+    # 1) Best source: the current browser URL
     try:
-        # Try to get the server port
-        server_port = st.get_option('server.port') or 8501
+        app_url = st.context.url
+        if app_url:
+            return app_url.rstrip("/")
+    except:
+        pass
+
+    # 2) Fallback: request host header
+    try:
+        host = st.context.headers.get("host", "")
+        if host:
+            protocol = "https" if not host.startswith("localhost") else "http"
+            return f"{protocol}://{host}"
+    except:
+        pass
+
+    # 3) Local development fallback
+    try:
+        server_port = st.get_option("server.port") or 8501
         return f"http://localhost:{server_port}"
     except:
         return "http://localhost:8501"
