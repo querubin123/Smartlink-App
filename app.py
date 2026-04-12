@@ -13,6 +13,7 @@ import requests
 import time
 import urllib.parse
 import json
+import re
 
 # Page config must be the first Streamlit command
 st.set_page_config(
@@ -21,6 +22,46 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# ============================================================================
+# AUTOMATIC DOMAIN DETECTION - NO MANUAL CONFIGURATION NEEDED
+# ============================================================================
+def get_app_domain():
+    """Automatically detect the correct domain for the app"""
+    
+    # Check if running on Streamlit Cloud
+    is_streamlit_cloud = os_module.getenv('STREAMLIT_SERVER_ADDRESS') is not None
+    
+    if is_streamlit_cloud:
+        # Get the app URL from environment or construct it
+        app_url = os_module.getenv('STREAMLIT_SERVER_ADDRESS', '')
+        if app_url:
+            # Extract domain from full URL if needed
+            if '://' in app_url:
+                domain = app_url.split('://')[1].split('/')[0]
+            else:
+                domain = app_url.split('/')[0]
+            return f"https://{domain}"
+        
+        # Fallback: try to get from request headers
+        try:
+            host = st.context.headers.get('Host', '')
+            if host:
+                protocol = 'https' if 'streamlit.app' in host else 'http'
+                return f"{protocol}://{host}"
+        except:
+            pass
+    
+    # Local development
+    try:
+        # Try to get the server port
+        server_port = st.get_option('server.port') or 8501
+        return f"http://localhost:{server_port}"
+    except:
+        return "http://localhost:8501"
+
+# Get the automatically detected domain
+app_domain = get_app_domain()
 
 # Initialize session state
 if 'show_success' not in st.session_state:
@@ -676,8 +717,7 @@ def get_real_ip():
     # Fallback to get IP from headers (for deployed apps)
     try:
         # Try to get from request headers (Streamlit Cloud)
-        import streamlit as st
-        client_ip = st.request.headers.get('X-Forwarded-For', st.request.remote_addr)
+        client_ip = st.context.headers.get('X-Forwarded-For', '127.0.0.1')
         if client_ip:
             return client_ip.split(',')[0].strip()
     except:
@@ -758,10 +798,8 @@ def get_geolocation_from_ip(ip_address):
                 data = response.json()
                 result = api['parser'](data)
                 if result and result['country'] != 'Unknown':
-                    print(f"Geolocation success via {api['url']}: {result['country']}")
                     return result
         except Exception as e:
-            print(f"Geolocation API error: {e}")
             continue
     
     # Final fallback
@@ -778,7 +816,7 @@ def get_client_info():
     """Get comprehensive client information from request headers"""
     try:
         # Try to get real user agent from request headers
-        user_agent = st.request.headers.get('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+        user_agent = st.context.headers.get('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
     except:
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     
@@ -886,7 +924,6 @@ def init_db():
         c.execute('''CREATE INDEX IF NOT EXISTS idx_clicks_country ON clicks(country)''')
         
         conn.commit()
-        print("Database initialized successfully")
     except Exception as e:
         print(f"Database initialization error: {e}")
     finally:
@@ -924,9 +961,8 @@ def check_and_update_schema():
             if column not in existing_columns:
                 try:
                     c.execute(f"ALTER TABLE clicks ADD COLUMN {column} {column_type}")
-                    print(f"Added missing column: {column}")
                 except Exception as e:
-                    print(f"Error adding column {column}: {e}")
+                    pass
         
         conn.commit()
     except Exception as e:
@@ -1046,11 +1082,9 @@ def record_click(short_code):
         # Get referer
         referer = "Direct"
         try:
-            referer = st.request.headers.get('Referer', 'Direct')
+            referer = st.context.headers.get('Referer', 'Direct')
         except:
             pass
-        
-        print(f"Click recorded - IP: {ip_address}, Country: {geo_data['country']}, City: {geo_data['city']}, Browser: {client_info['browser']}, OS: {client_info['operating_system']}")
         
         # Insert click record
         c.execute("""
@@ -1075,10 +1109,9 @@ def record_click(short_code):
         """, (click_time, short_code))
         
         conn.commit()
-        print(f"✓ Click recorded for {short_code} - Country: {geo_data['country']}, Browser: {client_info['browser']}")
         return True
     except Exception as e:
-        print(f"❌ Error recording click: {e}")
+        print(f"Error recording click: {e}")
         if conn:
             conn.rollback()
         return False
@@ -1376,107 +1409,199 @@ def add_utm_parameters(base_url, utm_params):
     return final_url
 
 # ============================================================================
-# REDIRECT HANDLER - FIXED TO PRESERVE UTM PARAMS
+# REDIRECT HANDLER - WORKS WITH BOTH ?go= AND /code FORMATS
 # ============================================================================
-# Check if this is a redirect request
-query_params = st.query_params
-try:
-    # Try to get from query params directly
-    if 'go' in st.query_params:
-        short_code = st.query_params['go']
-    else:
-        # Check if there's a URL parameter in the path
-        import re
-        path = st.request.path if hasattr(st, 'request') else ''
-        match = re.search(r'\?go=([^&]+)', path)
-        if match:
-            short_code = match.group(1)
-        else:
-            short_code = None
-except Exception as e:
-    print(f"Error getting query params: {e}")
-    short_code = None
 
-if short_code:
-    # Get the original URL
-    original_url = get_link(short_code)
+def handle_redirect():
+    """Handle the redirect logic when a short link is accessed"""
+    short_code = None
     
-    if original_url:
-        # Record the click
-        click_recorded = record_click(short_code)
+    # Method 1: Try to get from query parameters (?go=code)
+    try:
+        if hasattr(st, 'query_params') and 'go' in st.query_params:
+            short_code = st.query_params['go']
+    except Exception as e:
+        print(f"st.query_params error: {e}")
+    
+    # Method 2: Try to get from URL path (for /code format)
+    if not short_code:
+        try:
+            # Get the current URL path
+            if hasattr(st, 'context') and hasattr(st.context, 'path'):
+                path = st.context.path
+                # Remove leading/trailing slashes
+                if path:
+                    clean_path = path.strip('/')
+                    # Check if it's a valid short code (not empty, no dots)
+                    if clean_path and '.' not in clean_path and '/' not in clean_path:
+                        short_code = clean_path
+        except Exception as e:
+            print(f"Path parsing error: {e}")
+    
+    # Method 3: Try to get from request URL directly
+    if not short_code:
+        try:
+            ctx = st.runtime.scriptrunner.get_script_run_ctx()
+            if ctx and hasattr(ctx, 'request'):
+                if hasattr(ctx.request, 'url'):
+                    full_url = str(ctx.request.url)
+                    # Try ?go= pattern
+                    match = re.search(r'[?&]go=([^&]+)', full_url)
+                    if match:
+                        short_code = match.group(1)
+                    else:
+                        # Try /code pattern (last part of path)
+                        path_match = re.search(r'/([a-zA-Z0-9\-_]{3,10})(?:\?|$)', full_url)
+                        if path_match:
+                            short_code = path_match.group(1)
+        except Exception as e:
+            print(f"Context parsing error: {e}")
+    
+    # If we found a short code, handle the redirect
+    if short_code:
+        # Get the original URL from database
+        original_url = get_link(short_code)
         
-        # HTML redirect page with immediate redirect
-        html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Redirecting - SmartLink</title>
-            <meta http-equiv="refresh" content="0; url={original_url}">
-            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-            <style>
-                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-                body {{
-                    font-family: 'Inter', sans-serif;
-                    background: linear-gradient(135deg, #0a0f1e 0%, #0d1424 50%, #111827 100%);
-                    color: white;
-                    min-height: 100vh;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                }}
-                .container {{
-                    text-align: center;
-                    padding: 2rem;
-                }}
-                .loader {{
-                    width: 40px;
-                    height: 40px;
-                    border: 3px solid rgba(59, 130, 246, 0.2);
-                    border-top: 3px solid #3b82f6;
-                    border-radius: 50%;
-                    animation: spin 0.8s linear infinite;
-                    margin: 1rem auto;
-                }}
-                @keyframes spin {{
-                    0% {{ transform: rotate(0deg); }}
-                    100% {{ transform: rotate(360deg); }}
-                }}
-                a {{
-                    color: #60a5fa;
-                    text-decoration: none;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1 style="background: linear-gradient(135deg, #60a5fa, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">SmartLink</h1>
-                <div class="loader"></div>
-                <p>Redirecting you to your destination...</p>
-                <p style="font-size: 0.8rem; color: #6b7280; margin-top: 1rem;">
-                    If you are not redirected automatically, 
-                    <a href="{original_url}">click here</a>
-                </p>
-            </div>
-            <script>
-                window.location.href = "{original_url}";
-            </script>
-        </body>
-        </html>
-        """
-        st.markdown(html, unsafe_allow_html=True)
-        st.stop()
-    else:
-        # 404 error page
-        st.markdown(f"""
-        <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #1a2332, #111827); border-radius: 24px; border: 1px solid #ef4444; margin: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🔗</div>
-            <h1 style="color: #ef4444; font-size: 2rem;">404 - Link Not Found</h1>
-            <h2 style="color: #f3f4f6; margin: 1rem 0; font-size: 1.2rem;">The short link '<strong style="color: #60a5fa;">{short_code}</strong>' doesn't exist</h2>
-            <p style="color: #9ca3af; margin-bottom: 2rem;">It may have been removed or the code is incorrect.</p>
-            <a href="/" style="display: inline-block; padding: 0.8rem 2rem; background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; text-decoration: none; border-radius: 12px; font-weight: 600;">← Back to Home</a>
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
+        if original_url:
+            # Record the click asynchronously
+            try:
+                record_click(short_code)
+            except Exception as e:
+                print(f"Click recording error: {e}")
+            
+            # Redirect using both meta refresh and JavaScript for maximum compatibility
+            st.markdown(f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta http-equiv="refresh" content="0; url={original_url}">
+                    <script>
+                        window.location.href = "{original_url}";
+                        window.location.replace("{original_url}");
+                    </script>
+                    <title>Redirecting to {original_url[:50]}...</title>
+                    <style>
+                        body {{
+                            background: linear-gradient(135deg, #0a0f1e 0%, #111827 100%);
+                            font-family: 'Inter', Arial, sans-serif;
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            height: 100vh;
+                            margin: 0;
+                        }}
+                        .redirect-box {{
+                            text-align: center;
+                            padding: 40px;
+                            background: rgba(26, 35, 50, 0.9);
+                            border-radius: 20px;
+                            border: 1px solid #3b82f6;
+                            box-shadow: 0 0 40px rgba(59, 130, 246, 0.2);
+                        }}
+                        h2 {{ color: #f3f4f6; }}
+                        p {{ color: #9ca3af; }}
+                        a {{ color: #3b82f6; text-decoration: none; }}
+                        .spinner {{
+                            border: 3px solid #2d3748;
+                            border-top: 3px solid #3b82f6;
+                            border-radius: 50%;
+                            width: 40px;
+                            height: 40px;
+                            animation: spin 1s linear infinite;
+                            margin: 20px auto;
+                        }}
+                        @keyframes spin {{
+                            0% {{ transform: rotate(0deg); }}
+                            100% {{ transform: rotate(360deg); }}
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="redirect-box">
+                        <div class="spinner"></div>
+                        <h2>Redirecting you...</h2>
+                        <p>Please wait while we take you to your destination.</p>
+                        <p style="font-size: 0.8rem; margin-top: 20px;">If you are not redirected automatically, <a href="{original_url}">click here</a>.</p>
+                    </div>
+                </body>
+                </html>
+            """, unsafe_allow_html=True)
+            st.stop()
+        else:
+            # Show 404 error with better styling
+            st.markdown(f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body {{
+                            background: linear-gradient(135deg, #0a0f1e 0%, #111827 100%);
+                            font-family: 'Inter', Arial, sans-serif;
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            height: 100vh;
+                            margin: 0;
+                        }}
+                        .error-box {{
+                            text-align: center;
+                            padding: 50px;
+                            background: rgba(26, 35, 50, 0.9);
+                            border-radius: 20px;
+                            border: 1px solid #ef4444;
+                            box-shadow: 0 0 40px rgba(239, 68, 68, 0.2);
+                            max-width: 500px;
+                        }}
+                        h1 {{ 
+                            color: #ef4444; 
+                            font-size: 3rem;
+                            margin-bottom: 10px;
+                        }}
+                        h2 {{ color: #f3f4f6; margin-bottom: 20px; }}
+                        p {{ color: #9ca3af; margin-bottom: 10px; }}
+                        .code {{
+                            background: #1a2332;
+                            padding: 10px 20px;
+                            border-radius: 10px;
+                            color: #60a5fa;
+                            font-family: monospace;
+                            font-size: 1.2rem;
+                            display: inline-block;
+                            margin: 20px 0;
+                        }}
+                        a {{
+                            display: inline-block;
+                            padding: 12px 24px;
+                            background: #3b82f6;
+                            color: white;
+                            text-decoration: none;
+                            border-radius: 10px;
+                            margin-top: 20px;
+                            transition: all 0.3s ease;
+                        }}
+                        a:hover {{
+                            background: #2563eb;
+                            transform: translateY(-2px);
+                            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="error-box">
+                        <h1>404</h1>
+                        <h2>Link Not Found</h2>
+                        <p>The short link you're looking for doesn't exist.</p>
+                        <div class="code">/{short_code}</div>
+                        <p style="font-size: 0.9rem;">Please check the link and try again.</p>
+                        <a href="/">← Go to SmartLink Home</a>
+                    </div>
+                </body>
+                </html>
+            """, unsafe_allow_html=True)
+            st.stop()
+
+# Call the redirect handler at the very beginning
+handle_redirect()
 
 # ============================================================================
 # MAIN UI - ENHANCED PROFESSIONAL LAYOUT
@@ -1484,15 +1609,17 @@ if short_code:
 
 # Compact Header with animation
 st.markdown('<h1 class="main-title">🔗 SmartLink</h1>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">Professional URL Shortener with Real-time Analytics • Track every click with precision</p>', unsafe_allow_html=True)
+st.markdown(f'<p class="sub-title">Professional URL Shortener with Real-time Analytics • Track every click with precision</p>', unsafe_allow_html=True)
 
-# Get base URL for link construction
-base_url = st.get_option('server.baseUrlPath')
-if not base_url or base_url == '/':
-    base_url = ''
-    app_domain = "https://smartlinkapp.streamlit.app"
-else:
-    app_domain = base_url
+# Display current domain for reference
+domain_display = app_domain.replace('https://', '').replace('http://', '')
+st.markdown(f"""
+<div style="text-align: center; margin-bottom: 0.5rem;">
+    <span style="background: rgba(59, 130, 246, 0.15); padding: 0.25rem 1rem; border-radius: 30px; font-size: 0.7rem; color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">
+        🌐 Short Domain: {domain_display}
+    </span>
+</div>
+""", unsafe_allow_html=True)
 
 # Get stats for display
 total_links, total_clicks, active_links, total_countries, clicks_24h = get_stats()
@@ -1656,7 +1783,8 @@ with left_col:
                 else:
                     # Create link - store the URL with UTM parameters
                     if create_link(short_code, final_url):
-                        # Construct full URL (THIS IS THE SHORTENED LINK)
+                        # Construct full URL - use ?go= format for guaranteed compatibility
+                        # Both ?go=code and /code formats will work for redirects
                         full_url = f"{app_domain}/?go={short_code}"
                         
                         # Store in session state to display AFTER the form
@@ -1727,14 +1855,14 @@ if st.session_state.get('show_success', False):
     </div>
     """, unsafe_allow_html=True)
     
-    # Copy Section - Shows the SHORTENED URL for manual copy only (No One-Click Button)
+    # Copy Section
     st.markdown("""
     <div style="margin: 1rem 0 0.5rem 0;">
         <h4 style="color: #f3f4f6; font-size: 0.95rem; font-weight: 600; margin-bottom: 0.75rem;">📋 Copy Your Short Link</h4>
     </div>
     """, unsafe_allow_html=True)
     
-    # Test Link Button only (No copy button)
+    # Test Link Button
     col_btn1, col_btn2 = st.columns([1, 1])
     
     with col_btn1:
@@ -1747,7 +1875,7 @@ if st.session_state.get('show_success', False):
         </div>
         """, unsafe_allow_html=True)
     
-    # URL as code for manual copy (shows the SHORTENED LINK)
+    # URL as code for manual copy
     st.markdown("""
     <div style="margin-top: 0.75rem;">
         <div style="background: #0a0f1e; border-radius: 10px; padding: 0.5rem 0.75rem; border: 1px dashed #3b82f6; text-align: center;">
@@ -1758,6 +1886,15 @@ if st.session_state.get('show_success', False):
     """, unsafe_allow_html=True)
     
     st.code(full_url, language="text")
+    
+    # Also show the clean format version for reference
+    clean_url = f"{app_domain}/{short_code}"
+    st.markdown(f"""
+    <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(59, 130, 246, 0.05); border-radius: 8px; text-align: center;">
+        <span style="color: #6b7280; font-size: 0.65rem;">Clean format also works: </span>
+        <code style="color: #60a5fa; font-size: 0.7rem;">{clean_url}</code>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Dismiss button
     if st.button("✖️ Dismiss", key="clear_success", use_container_width=True):
@@ -2075,12 +2212,12 @@ if links:
         </div>
         """, unsafe_allow_html=True)
         
-        country_stats = get_country_stats()
-        if country_stats:
+        country_stats_tab = get_country_stats()
+        if country_stats_tab:
             col1, col2 = st.columns([1, 1])
             
             with col1:
-                df_countries = pd.DataFrame(country_stats, columns=['Country', 'Clicks'])
+                df_countries = pd.DataFrame(country_stats_tab, columns=['Country', 'Clicks'])
                 fig = px.bar(df_countries.head(8), x='Country', y='Clicks', title='Top Countries', color='Clicks', color_continuous_scale='blues')
                 fig.update_layout(
                     height=300,
@@ -2092,7 +2229,7 @@ if links:
                     yaxis=dict(gridcolor='#2d3748'),
                     coloraxis_showscale=False
                 )
-                st.plotly_chart(fig, use_container_width=True, key="country_bar_chart")
+                st.plotly_chart(fig, use_container_width=True, key="country_bar_chart_tab")
             
             with col2:
                 fig = px.pie(df_countries.head(6), values='Clicks', names='Country', title='Distribution', hole=0.3)
@@ -2104,7 +2241,7 @@ if links:
                     margin=dict(l=20, r=20, t=40, b=20)
                 )
                 fig.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig, use_container_width=True, key="country_pie_chart")
+                st.plotly_chart(fig, use_container_width=True, key="country_pie_chart_tab")
         else:
             st.info("No geographic data available yet", icon="🌍")
     
@@ -2133,7 +2270,7 @@ if links:
                     font=dict(color='white', size=10),
                     margin=dict(l=20, r=20, t=40, b=20)
                 )
-                st.plotly_chart(fig, use_container_width=True, key="device_pie_chart")
+                st.plotly_chart(fig, use_container_width=True, key="device_pie_chart_tab")
             else:
                 st.info("No device data yet", icon="📱")
             
@@ -2153,7 +2290,7 @@ if links:
                     yaxis=dict(gridcolor='#2d3748'),
                     coloraxis_showscale=False
                 )
-                st.plotly_chart(fig, use_container_width=True, key="os_bar_chart")
+                st.plotly_chart(fig, use_container_width=True, key="os_bar_chart_tab")
             else:
                 st.info("No OS data yet", icon="💿")
         
@@ -2172,12 +2309,12 @@ if links:
                     yaxis=dict(gridcolor='#2d3748'),
                     coloraxis_showscale=False
                 )
-                st.plotly_chart(fig, use_container_width=True, key="browser_bar_chart")
+                st.plotly_chart(fig, use_container_width=True, key="browser_bar_chart_tab")
             else:
                 st.info("No browser data yet", icon="🌐")
     
     with tab4:
-        # Link details - NO COPY BUTTONS, just display info
+        # Link details
         for idx, (code, url, clicks, created, last_clicked) in enumerate(links[:5]):
             # Format dates
             try:
@@ -2289,8 +2426,6 @@ else:
 # ============================================================================
 # ENHANCED COMPACT FOOTER
 # ============================================================================
-from datetime import datetime
-
 current_year = datetime.now().year
 
 st.markdown(f"""
@@ -2301,7 +2436,7 @@ st.markdown(f"""
         <div><span style="color: #f59e0b; font-weight: 800;">{total_countries}</span> <span style="color: #6b7280;">Countries</span></div>
         <div><span style="color: #ef4444; font-weight: 800;">{clicks_24h}</span> <span style="color: #6b7280;">Last 24h</span></div>
     </div>
-    <p style="font-size: 0.75rem;">🔗 SmartLink URL Shortener — Real-time Analytics • UTM Tracking • Secure & Reliable</p>
+    <p style="font-size: 0.75rem;">🔗 SmartLink URL Shortener • {domain_display} • Real-time Analytics • UTM Tracking</p>
     <p style="color: #4b5563; font-size: 0.7rem;">© {current_year} SmartLink • Made with ❤️ for the Philippines 🇵🇭</p>
 </div>
 """, unsafe_allow_html=True)
