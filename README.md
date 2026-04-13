@@ -5,7 +5,7 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Smartlink--App-blue)](https://github.com/querubin123/Smartlink-App)
 
-A professional, feature-rich URL shortener with real-time analytics, dual-mode geolocation (GPS + IP), device detection, and UTM parameter support. Built with Streamlit and SQLite.
+A professional, feature-rich URL shortener with real-time analytics, dual-mode geolocation (GPS + IP), and device detection. Built with Streamlit and SQLite.
 
 ## ✨ Features
 
@@ -13,7 +13,6 @@ A professional, feature-rich URL shortener with real-time analytics, dual-mode g
 - **🔗 URL Shortening** - Create short, memorable links from long URLs
 - **🎨 Custom Short Codes** - Personalize your links with custom aliases
 - **📊 Real-time Analytics** - Track every click with detailed statistics
-- **📈 UTM Parameters** - Track marketing campaigns with UTM tags
 - **⏰ 24-Hour Activity** - Monitor recent click activity
 
 ### Location & Device Tracking
@@ -51,7 +50,6 @@ A professional, feature-rich URL shortener with real-time analytics, dual-mode g
 - [Usage Guide](#usage-guide)
 - [Geolocation System](#geolocation-system)
 - [Analytics Dashboard](#analytics-dashboard)
-- [UTM Tracking](#utm-tracking)
 - [Database Schema](#database-schema)
 - [Technologies Used](#technologies-used)
 - [Contributing](#contributing)
@@ -139,6 +137,7 @@ No environment variables are required for local development. The app uses:
    - Python version: 3.9+
 6. Click "Deploy"
 
+Your app will be live at: **https://smartlinkapp.streamlit.app/**
 
 ## 📖 Usage Guide
 
@@ -146,9 +145,8 @@ No environment variables are required for local development. The app uses:
 
 1. Enter your long URL in the "Destination URL" field
 2. (Optional) Add a custom short code
-3. (Optional) Add UTM parameters for campaign tracking
-4. Click "🚀 Generate Short Link"
-5. Copy your new short URL
+3. Click "🚀 Generate Short Link"
+4. Copy your new short URL
 
 ### Example
 
@@ -203,26 +201,6 @@ The dashboard provides comprehensive insights across 5 tabs:
 - **Individual Link Performance** - Per-link click statistics
 - **Country Breakdown** - Geographic data for each link
 - **Recent Activity** - Latest clicks with device and location info
-
-## 📈 UTM Tracking
-
-Track marketing campaigns with UTM parameters:
-
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `utm_source` | Traffic source | google, facebook, newsletter |
-| `utm_medium` | Marketing medium | cpc, email, social |
-| `utm_campaign` | Campaign name | summer-sale, black-friday |
-| `utm_term` | Paid keywords | running+shoes |
-| `utm_content` | Content variation | cta-button, banner-ad |
-
-### Example with UTM
-
-```
-Original: https://mywebsite.com/product
-With UTM: https://mywebsite.com/product?utm_source=facebook&utm_medium=social&utm_campaign=summer-sale
-Shortened: https://smartlinkapp.streamlit.app/?go=summer2024
-```
 
 ## 🗄️ Database Schema
 
@@ -412,5 +390,3 @@ The app automatically rotates between these APIs to stay within limits.
 
 **Live App:** [https://smartlinkapp.streamlit.app/](https://smartlinkapp.streamlit.app/)
 **GitHub Repo:** [https://github.com/querubin123/Smartlink-App](https://github.com/querubin123/Smartlink-App)
-
-
