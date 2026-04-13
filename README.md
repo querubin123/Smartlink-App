@@ -412,5 +412,5 @@ The app automatically rotates between these APIs to stay within limits.
 
 **Live App:** [https://smartlinkapp.streamlit.app/](https://smartlinkapp.streamlit.app/)
 **GitHub Repo:** [https://github.com/querubin123/Smartlink-App](https://github.com/querubin123/Smartlink-App)
-```
+
 
