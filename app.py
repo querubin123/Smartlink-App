@@ -1775,18 +1775,28 @@ with left_col:
                 if not url.startswith(('http://', 'https://')):
                     url = 'https://' + url
                 
-                utm_params = {
-                    'utm_source': utm_source.strip() if utm_source else "",
-                    'utm_medium': utm_medium.strip() if utm_medium else "",
-                    'utm_campaign': utm_campaign.strip() if utm_campaign else "",
-                    'utm_term': utm_term.strip() if utm_term else "",
-                    'utm_content': utm_content.strip() if utm_content else ""
-                }
+                # Collect UTM parameters from form
+                utm_params = {}
+                if utm_source and utm_source.strip():
+                    utm_params['utm_source'] = utm_source.strip()
+                if utm_medium and utm_medium.strip():
+                    utm_params['utm_medium'] = utm_medium.strip()
+                if utm_campaign and utm_campaign.strip():
+                    utm_params['utm_campaign'] = utm_campaign.strip()
+                if utm_term and utm_term.strip():
+                    utm_params['utm_term'] = utm_term.strip()
+                if utm_content and utm_content.strip():
+                    utm_params['utm_content'] = utm_content.strip()
                 
-                utm_params = {k: v for k, v in utm_params.items() if v}
+                # Add UTM parameters to URL
                 final_url = add_utm_parameters(url, utm_params)
                 
-                if custom_code:
+                # Debug output
+                st.write(f"🔍 Debug: Original URL: {url}")
+                st.write(f"🔍 Debug: Final URL with UTM: {final_url}")
+                
+                # Generate short code
+                if custom_code and custom_code.strip():
                     short_code = custom_code.lower().replace(' ', '-')
                     short_code = ''.join(c for c in short_code if c.isalnum() or c == '-')
                     if not short_code or len(short_code) < 3:
@@ -1794,20 +1804,27 @@ with left_col:
                 else:
                     short_code = generate_short_code()
                 
+                # Check if code exists
                 if check_link_exists(short_code):
                     st.error(f"❌ Code '{short_code}' is already taken. Try another one.")
                 else:
+                    # Create link with the URL containing UTM parameters
                     if create_link(short_code, final_url):
-                        full_url = f"{app_domain}/?go={short_code}"
-                        
-                        st.session_state['show_success'] = True
-                        st.session_state['success_full_url'] = full_url
-                        st.session_state['success_short_code'] = short_code
-                        st.session_state['success_final_url'] = final_url
-                        st.session_state['success_utm_params'] = utm_params
-                        
-                        st.balloons()
-                        st.rerun()
+                        # Verify the URL was stored correctly
+                        verify_url = get_link(short_code)
+                        if verify_url != final_url:
+                            st.error(f"URL storage verification failed! Expected: {final_url}, Got: {verify_url}")
+                        else:
+                            full_url = f"{app_domain}/?go={short_code}"
+                            
+                            st.session_state['show_success'] = True
+                            st.session_state['success_full_url'] = full_url
+                            st.session_state['success_short_code'] = short_code
+                            st.session_state['success_final_url'] = final_url
+                            st.session_state['success_utm_params'] = utm_params
+                            
+                            st.balloons()
+                            st.rerun()
                     else:
                         st.error("Failed to create link. Please try again.")
         
