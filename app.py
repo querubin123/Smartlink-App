@@ -307,43 +307,6 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* Geolocation Card */
-    .geo-card {
-        background: linear-gradient(135deg, #1e2a3a, #1a2332);
-        border: 1px solid var(--primary);
-        border-radius: 16px;
-        padding: 0.75rem;
-        margin-bottom: 0.75rem;
-        transition: all 0.3s ease;
-    }
-    
-    .geo-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
-    }
-    
-    .geo-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-        background: rgba(59, 130, 246, 0.15);
-        padding: 0.25rem 0.75rem;
-        border-radius: 30px;
-        font-size: 0.7rem;
-        color: var(--primary-light);
-    }
-    
-    .geo-location-text {
-        font-size: 0.75rem;
-        color: var(--text-muted);
-        margin: 0.25rem 0;
-    }
-    
-    .geo-location-value {
-        color: var(--text-primary);
-        font-weight: 500;
-    }
-
     /* Button styling */
     .stButton > button {
         background: linear-gradient(135deg, var(--primary), var(--primary-dark));
@@ -718,14 +681,6 @@ st.markdown("""
     .stSpinner > div {
         border-color: var(--primary) transparent transparent transparent !important;
     }
-    
-    /* Map container */
-    .map-container {
-        border-radius: 12px;
-        overflow: hidden;
-        border: 1px solid var(--primary);
-        margin-top: 0.5rem;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -758,7 +713,6 @@ def get_browser_geolocation():
 def get_country_from_coords(lat, lon):
     """Get country name from coordinates using reverse geocoding"""
     try:
-        # Use OpenStreetMap Nominatim for reverse geocoding
         url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
         response = requests.get(url, headers={'User-Agent': 'SmartLink URL Shortener'}, timeout=5)
         if response.status_code == 200:
@@ -803,7 +757,6 @@ def get_real_ip():
     
     # Fallback to get IP from headers (for deployed apps)
     try:
-        # Try to get from request headers (Streamlit Cloud)
         client_ip = st.context.headers.get('X-Forwarded-For', '127.0.0.1')
         if client_ip:
             return client_ip.split(',')[0].strip()
@@ -930,12 +883,10 @@ def get_combined_geolocation():
 def get_client_info():
     """Get comprehensive client information from request headers"""
     try:
-        # Try to get real user agent from request headers
         user_agent = st.context.headers.get('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
     except:
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     
-    # Parse user agent
     device, browser, operating_system = parse_user_agent(user_agent)
     
     return {
@@ -949,7 +900,6 @@ def parse_user_agent(user_agent_string):
     """Parse user agent string to get device and browser info"""
     user_agent = user_agent_string.lower()
     
-    # Detect browser
     if 'chrome' in user_agent and 'edg' not in user_agent and 'opr' not in user_agent:
         browser = 'Chrome'
     elif 'firefox' in user_agent:
@@ -963,7 +913,6 @@ def parse_user_agent(user_agent_string):
     else:
         browser = 'Unknown'
     
-    # Detect OS
     if 'windows' in user_agent:
         operating_system = 'Windows'
     elif 'mac' in user_agent:
@@ -977,7 +926,6 @@ def parse_user_agent(user_agent_string):
     else:
         operating_system = 'Unknown'
     
-    # Detect device type
     if 'mobile' in user_agent or ('android' in user_agent and 'mobile' in user_agent):
         device = 'Mobile'
     elif 'tablet' in user_agent or 'ipad' in user_agent:
@@ -1003,7 +951,6 @@ def init_db():
         conn = sqlite3.connect(get_db_path())
         c = conn.cursor()
         
-        # Create links table
         c.execute('''CREATE TABLE IF NOT EXISTS links (
             id TEXT PRIMARY KEY,
             short_code TEXT UNIQUE NOT NULL,
@@ -1013,7 +960,6 @@ def init_db():
             last_clicked TEXT
         )''')
         
-        # Create clicks table with all columns including geolocation source
         c.execute('''CREATE TABLE IF NOT EXISTS clicks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             short_code TEXT,
@@ -1036,7 +982,6 @@ def init_db():
             geo_source TEXT DEFAULT 'ip_detection'
         )''')
         
-        # Create indexes for better performance
         c.execute('''CREATE INDEX IF NOT EXISTS idx_clicks_short_code ON clicks(short_code)''')
         c.execute('''CREATE INDEX IF NOT EXISTS idx_clicks_click_time ON clicks(click_time)''')
         c.execute('''CREATE INDEX IF NOT EXISTS idx_clicks_country ON clicks(country)''')
@@ -1056,11 +1001,9 @@ def check_and_update_schema():
         conn = sqlite3.connect(get_db_path())
         c = conn.cursor()
         
-        # Get existing columns in clicks table
         c.execute("PRAGMA table_info(clicks)")
         existing_columns = [column[1] for column in c.fetchall()]
         
-        # Define required columns and their types
         required_columns = {
             'city': 'TEXT DEFAULT "Unknown"',
             'region': 'TEXT DEFAULT "Unknown"',
@@ -1078,7 +1021,6 @@ def check_and_update_schema():
             'geo_source': 'TEXT DEFAULT "ip_detection"'
         }
         
-        # Add missing columns
         for column, column_type in required_columns.items():
             if column not in existing_columns:
                 try:
@@ -1107,11 +1049,8 @@ def reset_all_data():
         conn = sqlite3.connect(get_db_path())
         c = conn.cursor()
         
-        # Delete all records from both tables
         c.execute("DELETE FROM links")
         c.execute("DELETE FROM clicks")
-        
-        # Reset autoincrement for clicks table
         c.execute("DELETE FROM sqlite_sequence WHERE name='clicks'")
         
         conn.commit()
@@ -1193,21 +1132,15 @@ def record_click(short_code):
         c = conn.cursor()
         
         click_time = datetime.now().isoformat()
-        
-        # Get combined geolocation (browser + IP)
         geo_data = get_combined_geolocation()
-        
-        # Get REAL client info
         client_info = get_client_info()
         
-        # Get referer
         referer = "Direct"
         try:
             referer = st.context.headers.get('Referer', 'Direct')
         except:
             pass
         
-        # Insert click record with enhanced data
         c.execute("""
             INSERT INTO clicks (
                 short_code, click_time, ip_address, 
@@ -1225,7 +1158,6 @@ def record_click(short_code):
             geo_data.get('source', 'ip_detection')
         ))
         
-        # Update click count and last clicked
         c.execute("""
             UPDATE links 
             SET clicks = clicks + 1, last_clicked = ? 
@@ -1275,28 +1207,22 @@ def get_stats():
         conn = sqlite3.connect(get_db_path())
         c = conn.cursor()
         
-        # Total links
         c.execute("SELECT COUNT(*) FROM links")
         total_links = c.fetchone()[0]
         
-        # Total clicks
         c.execute("SELECT COUNT(*) FROM clicks")
         total_clicks = c.fetchone()[0]
         
-        # Active links (links with at least one click)
         c.execute("SELECT COUNT(DISTINCT short_code) FROM clicks")
         active_links = c.fetchone()[0]
         
-        # Unique countries
         c.execute("SELECT COUNT(DISTINCT country) FROM clicks WHERE country != 'Unknown'")
         total_countries = c.fetchone()[0]
         
-        # Clicks in last 24 hours
         yesterday = (datetime.now() - timedelta(days=1)).isoformat()
         c.execute("SELECT COUNT(*) FROM clicks WHERE click_time >= ?", (yesterday,))
         clicks_24h = c.fetchone()[0]
         
-        # GPS vs IP tracking stats
         c.execute("SELECT COUNT(*) FROM clicks WHERE geo_source = 'browser_gps'")
         gps_clicks = c.fetchone()[0]
         
@@ -1418,7 +1344,7 @@ def get_recent_clicks(limit=10):
         conn = sqlite3.connect(get_db_path())
         c = conn.cursor()
         c.execute("""
-            SELECT short_code, click_time, country, city, device_type, browser, operating_system, geo_source, latitude, longitude
+            SELECT short_code, click_time, country, city, device_type, browser, operating_system, geo_source
             FROM clicks 
             ORDER BY click_time DESC 
             LIMIT ?
@@ -1459,12 +1385,10 @@ def get_click_stats(days=7):
         conn = sqlite3.connect(get_db_path())
         c = conn.cursor()
         
-        # Generate date range for the last N days
         date_range = []
         for i in range(days - 1, -1, -1):
             date_range.append((datetime.now() - timedelta(days=i)).date().isoformat())
         
-        # Get actual clicks per day
         cutoff = (datetime.now() - timedelta(days=days)).isoformat()
         c.execute("""
             SELECT date(click_time) as date, COUNT(*) 
@@ -1475,8 +1399,6 @@ def get_click_stats(days=7):
         """, (cutoff,))
         
         result = dict(c.fetchall())
-        
-        # Fill in missing dates with zero
         timeline = [(date, result.get(date, 0)) for date in date_range]
         
         return timeline
@@ -1532,24 +1454,18 @@ def get_geo_source_stats():
 # ============================================================================
 def add_utm_parameters(base_url, utm_params):
     """Add UTM parameters to a URL"""
-    # Filter out empty values
     utm_params = {k: v for k, v in utm_params.items() if v and v.strip()}
     
     if not utm_params:
         return base_url
     
-    # Parse existing URL
     parsed = urllib.parse.urlparse(base_url)
-    
-    # Get existing query parameters
     query_params = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
     
-    # Add UTM parameters
     for key, value in utm_params.items():
         if value and value.strip():
             query_params[key] = [value.strip()]
     
-    # Rebuild URL
     new_query = urllib.parse.urlencode(query_params, doseq=True)
     new_parsed = parsed._replace(query=new_query)
     final_url = urllib.parse.urlunparse(new_parsed)
@@ -1564,60 +1480,48 @@ def handle_redirect():
     """Handle the redirect logic when a short link is accessed"""
     short_code = None
     
-    # Method 1: Try to get from query parameters (?go=code)
     try:
         if hasattr(st, 'query_params') and 'go' in st.query_params:
             short_code = st.query_params['go']
     except Exception as e:
         print(f"st.query_params error: {e}")
     
-    # Method 2: Try to get from URL path (for /code format)
     if not short_code:
         try:
-            # Get the current URL path
             if hasattr(st, 'context') and hasattr(st.context, 'path'):
                 path = st.context.path
-                # Remove leading/trailing slashes
                 if path:
                     clean_path = path.strip('/')
-                    # Check if it's a valid short code (not empty, no dots)
                     if clean_path and '.' not in clean_path and '/' not in clean_path:
                         short_code = clean_path
         except Exception as e:
             print(f"Path parsing error: {e}")
     
-    # Method 3: Try to get from request URL directly
     if not short_code:
         try:
             ctx = st.runtime.scriptrunner.get_script_run_ctx()
             if ctx and hasattr(ctx, 'request'):
                 if hasattr(ctx.request, 'url'):
                     full_url = str(ctx.request.url)
-                    # Try ?go= pattern
                     match = re.search(r'[?&]go=([^&]+)', full_url)
                     if match:
                         short_code = match.group(1)
                     else:
-                        # Try /code pattern (last part of path)
                         path_match = re.search(r'/([a-zA-Z0-9\-_]{3,10})(?:\?|$)', full_url)
                         if path_match:
                             short_code = path_match.group(1)
         except Exception as e:
             print(f"Context parsing error: {e}")
     
-    # If we found a short code, handle the redirect
     if short_code:
-        # Get the original URL from database
         original_url = get_link(short_code)
         
         if original_url:
-            # Record the click asynchronously
             try:
                 record_click(short_code)
             except Exception as e:
                 print(f"Click recording error: {e}")
             
-            # Redirect using both meta refresh and JavaScript for maximum compatibility
             st.markdown(f"""
                 <!DOCTYPE html>
                 <html>
@@ -1627,7 +1531,7 @@ def handle_redirect():
                         window.location.href = "{original_url}";
                         window.location.replace("{original_url}");
                     </script>
-                    <title>Redirecting to {original_url[:50]}...</title>
+                    <title>Redirecting...</title>
                     <style>
                         body {{
                             background: linear-gradient(135deg, #0a0f1e 0%, #111827 100%);
@@ -1644,11 +1548,7 @@ def handle_redirect():
                             background: rgba(26, 35, 50, 0.9);
                             border-radius: 20px;
                             border: 1px solid #3b82f6;
-                            box-shadow: 0 0 40px rgba(59, 130, 246, 0.2);
                         }}
-                        h2 {{ color: #f3f4f6; }}
-                        p {{ color: #9ca3af; }}
-                        a {{ color: #3b82f6; text-decoration: none; }}
                         .spinner {{
                             border: 3px solid #2d3748;
                             border-top: 3px solid #3b82f6;
@@ -1668,15 +1568,13 @@ def handle_redirect():
                     <div class="redirect-box">
                         <div class="spinner"></div>
                         <h2>Redirecting you...</h2>
-                        <p>Please wait while we take you to your destination.</p>
-                        <p style="font-size: 0.8rem; margin-top: 20px;">If you are not redirected automatically, <a href="{original_url}">click here</a>.</p>
+                        <p>If not redirected, <a href="{original_url}">click here</a></p>
                     </div>
                 </body>
                 </html>
             """, unsafe_allow_html=True)
             st.stop()
         else:
-            # Show 404 error with better styling
             st.markdown(f"""
                 <!DOCTYPE html>
                 <html>
@@ -1697,25 +1595,15 @@ def handle_redirect():
                             background: rgba(26, 35, 50, 0.9);
                             border-radius: 20px;
                             border: 1px solid #ef4444;
-                            box-shadow: 0 0 40px rgba(239, 68, 68, 0.2);
                             max-width: 500px;
                         }}
-                        h1 {{ 
-                            color: #ef4444; 
-                            font-size: 3rem;
-                            margin-bottom: 10px;
-                        }}
-                        h2 {{ color: #f3f4f6; margin-bottom: 20px; }}
-                        p {{ color: #9ca3af; margin-bottom: 10px; }}
+                        h1 {{ color: #ef4444; font-size: 3rem; }}
                         .code {{
                             background: #1a2332;
                             padding: 10px 20px;
                             border-radius: 10px;
                             color: #60a5fa;
                             font-family: monospace;
-                            font-size: 1.2rem;
-                            display: inline-block;
-                            margin: 20px 0;
                         }}
                         a {{
                             display: inline-block;
@@ -1725,12 +1613,6 @@ def handle_redirect():
                             text-decoration: none;
                             border-radius: 10px;
                             margin-top: 20px;
-                            transition: all 0.3s ease;
-                        }}
-                        a:hover {{
-                            background: #2563eb;
-                            transform: translateY(-2px);
-                            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
                         }}
                     </style>
                 </head>
@@ -1738,9 +1620,7 @@ def handle_redirect():
                     <div class="error-box">
                         <h1>404</h1>
                         <h2>Link Not Found</h2>
-                        <p>The short link you're looking for doesn't exist.</p>
                         <div class="code">/{short_code}</div>
-                        <p style="font-size: 0.9rem;">Please check the link and try again.</p>
                         <a href="/">← Go to SmartLink Home</a>
                     </div>
                 </body>
@@ -1784,71 +1664,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ============================================================================
-# GEOLOCATION INFO CARD - Shows current user's location
-# ============================================================================
-
-# Get current user's geolocation for display
-current_geo = get_combined_geolocation()
-
-if current_geo and current_geo.get('country') != 'Unknown':
-    flag = "🌍"
-    if "United States" in current_geo['country']:
-        flag = "🇺🇸"
-    elif "Philippines" in current_geo['country']:
-        flag = "🇵🇭"
-    elif "United Kingdom" in current_geo['country']:
-        flag = "🇬🇧"
-    elif "Germany" in current_geo['country']:
-        flag = "🇩🇪"
-    elif "France" in current_geo['country']:
-        flag = "🇫🇷"
-    elif "Japan" in current_geo['country']:
-        flag = "🇯🇵"
-    elif "Canada" in current_geo['country']:
-        flag = "🇨🇦"
-    elif "Australia" in current_geo['country']:
-        flag = "🇦🇺"
-    elif "India" in current_geo['country']:
-        flag = "🇮🇳"
-    
-    source_badge = "🎯 GPS" if current_geo.get('source') == 'browser_gps' else "🌐 IP Detection"
-    
-    st.markdown(f"""
-    <div class="geo-card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span style="font-size: 1.2rem;">{flag}</span>
-                <span style="font-weight: 600; color: #f3f4f6;">Your Location</span>
-            </div>
-            <span class="geo-badge">{source_badge}</span>
-        </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem;">
-            <div>
-                <div class="geo-location-text">📍 Country</div>
-                <div class="geo-location-value">{current_geo.get('country', 'Unknown')}</div>
-            </div>
-            <div>
-                <div class="geo-location-text">🏙️ City</div>
-                <div class="geo-location-value">{current_geo.get('city', 'Unknown')}</div>
-            </div>
-            <div>
-                <div class="geo-location-text">🌐 ISP</div>
-                <div class="geo-location-value">{current_geo.get('isp', 'Unknown')[:30]}</div>
-            </div>
-            <div>
-                <div class="geo-location-text">⏰ Timezone</div>
-                <div class="geo-location-value">{current_geo.get('timezone', 'Unknown')}</div>
-            </div>
-        </div>
-        <div style="margin-top: 0.5rem; font-size: 0.65rem; color: #6b7280; text-align: center;">
-            {current_geo.get('source', 'IP detection')} • {current_geo.get('ip_address', 'Unknown IP')}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-elif current_geo:
-    st.info("📍 Click 'Allow' when prompted to share your location for more accurate analytics! This helps track where your audience is coming from.", icon="🌍")
-
 # Main two-column layout with professional spacing
 left_col, right_col = st.columns([1.6, 1], gap="large")
 
@@ -1857,7 +1672,6 @@ with left_col:
     with st.container():
         st.markdown('<div class="card">', unsafe_allow_html=True)
         
-        # Header with icon
         col_icon, col_title = st.columns([0.08, 0.92])
         with col_icon:
             st.markdown("<span style='font-size: 1.3rem;'>✨</span>", unsafe_allow_html=True)
@@ -1867,7 +1681,6 @@ with left_col:
         st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
         
         with st.form("create_link_form", clear_on_submit=False):
-            # URL input with tooltip
             st.markdown("""
             <div class="field-label">
                 <span>🔗</span> Destination URL
@@ -1879,7 +1692,6 @@ with left_col:
             """, unsafe_allow_html=True)
             url = st.text_input("", placeholder="https://example.com/very/long/url/path", label_visibility="collapsed", key="destination_url")
             
-            # Two columns for custom code and submit
             col_code, col_submit = st.columns([1.2, 0.8])
             with col_code:
                 st.markdown("""
@@ -1897,11 +1709,9 @@ with left_col:
                 st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
                 submit = st.form_submit_button("🚀 Generate Short Link", use_container_width=True)
             
-            # UTM Section - Collapsible with better styling
             with st.expander("📊 UTM Tracking Parameters (Optional)", expanded=False):
                 st.markdown("<p style='color: #9ca3af; font-size: 0.75rem; margin-bottom: 0.75rem;'>Track your marketing campaigns with UTM parameters</p>", unsafe_allow_html=True)
                 
-                # Create 2x2 grid for UTM fields
                 utm_col1, utm_col2 = st.columns(2)
                 
                 with utm_col1:
@@ -1950,7 +1760,6 @@ with left_col:
                     """, unsafe_allow_html=True)
                     utm_term = st.text_input("", placeholder="e.g., keyword+phrase", key="utm_term", label_visibility="collapsed")
                 
-                # Additional row for utm_content
                 st.markdown("""
                 <div class="field-label">
                     <span>📝</span> utm_content
@@ -1963,11 +1772,9 @@ with left_col:
                 utm_content = st.text_input("", placeholder="e.g., cta-button, banner", key="utm_content", label_visibility="collapsed")
             
             if submit and url:
-                # Validate URL
                 if not url.startswith(('http://', 'https://')):
                     url = 'https://' + url
                 
-                # Capture UTM values directly from the form fields
                 utm_params = {
                     'utm_source': utm_source.strip() if utm_source else "",
                     'utm_medium': utm_medium.strip() if utm_medium else "",
@@ -1976,13 +1783,9 @@ with left_col:
                     'utm_content': utm_content.strip() if utm_content else ""
                 }
                 
-                # Remove empty parameters
                 utm_params = {k: v for k, v in utm_params.items() if v}
-                
-                # Add UTM parameters to URL if any are provided
                 final_url = add_utm_parameters(url, utm_params)
                 
-                # Generate or use custom code
                 if custom_code:
                     short_code = custom_code.lower().replace(' ', '-')
                     short_code = ''.join(c for c in short_code if c.isalnum() or c == '-')
@@ -1991,17 +1794,12 @@ with left_col:
                 else:
                     short_code = generate_short_code()
                 
-                # Check if code exists
                 if check_link_exists(short_code):
                     st.error(f"❌ Code '{short_code}' is already taken. Try another one.")
                 else:
-                    # Create link - store the URL with UTM parameters
                     if create_link(short_code, final_url):
-                        # Construct full URL - use ?go= format for guaranteed compatibility
-                        # Both ?go=code and /code formats will work for redirects
                         full_url = f"{app_domain}/?go={short_code}"
                         
-                        # Store in session state to display AFTER the form
                         st.session_state['show_success'] = True
                         st.session_state['success_full_url'] = full_url
                         st.session_state['success_short_code'] = short_code
@@ -2026,7 +1824,6 @@ if st.session_state.get('show_success', False):
     <div style="margin: 0.5rem 0 1rem 0;">
     """, unsafe_allow_html=True)
     
-    # Display UTM parameters summary if any
     if utm_params:
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(16, 185, 129, 0.08)); border-left: 4px solid #3b82f6; padding: 0.75rem 1rem; border-radius: 12px; margin-bottom: 1rem;">
@@ -2040,11 +1837,10 @@ if st.session_state.get('show_success', False):
         </div>
         """, unsafe_allow_html=True)
     
-    # Enhanced URL CARD - Shows the SHORTENED LINK
     st.markdown(f"""
     <div class="url-card">
         <div style="position: absolute; top: 0.75rem; right: 0.75rem;">
-            <span style="background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 0.25rem 0.9rem; border-radius: 30px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.5px;">✓ ACTIVE</span>
+            <span style="background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 0.25rem 0.9rem; border-radius: 30px; font-size: 0.65rem; font-weight: 700;">✓ ACTIVE</span>
         </div>
         <div style="text-align: center; margin-bottom: 0.5rem;">
             <span style="color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px;">Your Shortened URL</span>
@@ -2056,27 +1852,19 @@ if st.session_state.get('show_success', False):
             </a>
         </div>
         <div style="margin: 0.75rem 0; display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
-            <span style="background: #1e2a3a; padding: 0.3rem 1rem; border-radius: 30px; font-size: 0.7rem; font-weight: 500;">📋 Code: {short_code}</span>
-            <span style="background: #1e2a3a; padding: 0.3rem 1rem; border-radius: 30px; font-size: 0.7rem; font-weight: 500; color: #3b82f6;">🔗 {len(short_code)} chars</span>
-            <span style="background: #1e2a3a; padding: 0.3rem 1rem; border-radius: 30px; font-size: 0.7rem; font-weight: 500; color: #f59e0b;">⚡ Just now</span>
-        </div>
-        <div style="background: rgba(0,0,0,0.4); padding: 0.75rem 1rem; border-radius: 12px; margin-top: 0.5rem;">
-            <p style="color: #94a3b8; margin: 0 0 0.35rem 0; font-size: 0.7rem; font-weight: 500;">📌 Full Destination URL (with UTM):</p>
-            <p style="color: #e5e7eb; margin: 0; word-break: break-all; font-size: 0.75rem; font-family: 'Courier New', monospace;">
-                {final_url[:100]}{'...' if len(final_url) > 100 else ''}
-            </p>
+            <span style="background: #1e2a3a; padding: 0.3rem 1rem; border-radius: 30px; font-size: 0.7rem;">📋 Code: {short_code}</span>
+            <span style="background: #1e2a3a; padding: 0.3rem 1rem; border-radius: 30px; font-size: 0.7rem; color: #3b82f6;">🔗 {len(short_code)} chars</span>
+            <span style="background: #1e2a3a; padding: 0.3rem 1rem; border-radius: 30px; font-size: 0.7rem; color: #f59e0b;">⚡ Just now</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Copy Section
     st.markdown("""
     <div style="margin: 1rem 0 0.5rem 0;">
         <h4 style="color: #f3f4f6; font-size: 0.95rem; font-weight: 600; margin-bottom: 0.75rem;">📋 Copy Your Short Link</h4>
     </div>
     """, unsafe_allow_html=True)
     
-    # Test Link Button
     col_btn1, col_btn2 = st.columns([1, 1])
     
     with col_btn1:
@@ -2089,19 +1877,8 @@ if st.session_state.get('show_success', False):
         </div>
         """, unsafe_allow_html=True)
     
-    # URL as code for manual copy
-    st.markdown("""
-    <div style="margin-top: 0.75rem;">
-        <div style="background: #0a0f1e; border-radius: 10px; padding: 0.5rem 0.75rem; border: 1px dashed #3b82f6; text-align: center;">
-            <span style="color: #60a5fa; font-size: 0.7rem;">📋 Manual Copy: </span>
-            <span style="color: #9ca3af; font-size: 0.7rem;">Select the URL below and press Ctrl+C</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
     st.code(full_url, language="text")
     
-    # Also show the clean format version for reference
     clean_url = f"{app_domain}/{short_code}"
     st.markdown(f"""
     <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(59, 130, 246, 0.05); border-radius: 8px; text-align: center;">
@@ -2110,7 +1887,6 @@ if st.session_state.get('show_success', False):
     </div>
     """, unsafe_allow_html=True)
     
-    # Dismiss button
     if st.button("✖️ Dismiss", key="clear_success", use_container_width=True):
         st.session_state['show_success'] = False
         st.rerun()
@@ -2121,7 +1897,6 @@ with right_col:
     # Enhanced Quick Stats Section
     st.markdown('<div class="card">', unsafe_allow_html=True)
     
-    # Header with icon
     col_icon, col_title = st.columns([0.1, 0.9])
     with col_icon:
         st.markdown("<span style='font-size: 1.2rem;'>📊</span>", unsafe_allow_html=True)
@@ -2130,46 +1905,37 @@ with right_col:
     
     st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
     
-    # Enhanced metric cards with better visual hierarchy
     st.markdown(f"""
     <div class="metric-grid">
         <div class="metric-card">
             <div class="metric-value">{total_links}</div>
             <div class="metric-label">Total Links</div>
-            <div style="font-size: 0.6rem; color: #6b7280; margin-top: 0.2rem;">📌 Created</div>
         </div>
         <div class="metric-card">
             <div class="metric-value">{total_clicks}</div>
             <div class="metric-label">Total Clicks</div>
-            <div style="font-size: 0.6rem; color: #6b7280; margin-top: 0.2rem;">🖱️ All time</div>
         </div>
         <div class="metric-card">
             <div class="metric-value">{active_links}</div>
             <div class="metric-label">Active Links</div>
-            <div style="font-size: 0.6rem; color: #6b7280; margin-top: 0.2rem;">⚡ With clicks</div>
         </div>
         <div class="metric-card">
             <div class="metric-value">{total_countries}</div>
             <div class="metric-label">Countries</div>
-            <div style="font-size: 0.6rem; color: #6b7280; margin-top: 0.2rem;">🌍 Worldwide</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Enhanced 24-hour clicks with better visual
     st.markdown(f"""
     <div style="background: linear-gradient(135deg, #1e2a3a, #1a2332); padding: 0.85rem; border-radius: 14px; margin: 0.75rem 0; border-left: 4px solid #3b82f6;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
-                <span style="color: #94a3b8; font-size: 0.7rem; font-weight: 500; letter-spacing: 0.5px;">⚡ LAST 24 HOURS</span>
-                <div style="font-size: 0.6rem; color: #6b7280;">Recent activity</div>
+                <span style="color: #94a3b8; font-size: 0.7rem; font-weight: 500;">⚡ LAST 24 HOURS</span>
             </div>
             <span style="font-size: 1.8rem; font-weight: 800; color: #60a5fa;">{clicks_24h}</span>
         </div>
-        <div style="margin-top: 0.65rem;">
-            <div class="progress-bar" style="margin:0;">
-                <div class="progress-fill" style="width: {min(100, (clicks_24h/10)*100)}%;"></div>
-            </div>
+        <div class="progress-bar" style="margin-top: 0.65rem;">
+            <div class="progress-fill" style="width: {min(100, (clicks_24h/10)*100)}%;"></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -2182,7 +1948,7 @@ with right_col:
         total = sum(count for _, count in geo_source_stats)
         for source, count in geo_source_stats:
             percentage = (count / total) * 100 if total > 0 else 0
-            source_name = "🎯 GPS (Browser)" if source == "browser_gps" else "🌐 IP Detection"
+            source_name = "🎯 GPS" if source == "browser_gps" else "🌐 IP Detection"
             color = "#10b981" if source == "browser_gps" else "#3b82f6"
             
             st.markdown(f"""
@@ -2205,27 +1971,21 @@ with right_col:
             flag = "🌍"
             if "United States" in country:
                 flag = "🇺🇸"
-            elif "United Kingdom" in country:
-                flag = "🇬🇧"
             elif "Philippines" in country:
                 flag = "🇵🇭"
+            elif "United Kingdom" in country:
+                flag = "🇬🇧"
             elif "Germany" in country:
                 flag = "🇩🇪"
             elif "France" in country:
                 flag = "🇫🇷"
             elif "Japan" in country:
                 flag = "🇯🇵"
-            elif "Canada" in country:
-                flag = "🇨🇦"
-            elif "Australia" in country:
-                flag = "🇦🇺"
-            elif "India" in country:
-                flag = "🇮🇳"
             
             st.markdown(f"""
             <div style="margin: 0.4rem 0;">
                 <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 0.25rem;">
-                    <span style="display: flex; align-items: center; gap: 0.4rem;"><span style="font-size: 1rem;">{flag}</span> <span style="color: #e5e7eb;">{country[:25]}</span></span>
+                    <span><span style="font-size: 1rem;">{flag}</span> {country[:25]}</span>
                     <span style="color: #3b82f6; font-weight: 700;">{count}</span>
                 </div>
                 <div class="progress-bar"><div class="progress-fill" style="width: {percentage}%;"></div></div>
@@ -2240,7 +2000,7 @@ with right_col:
     if recent_clicks:
         for click in recent_clicks[:5]:
             if len(click) >= 5:
-                code, click_time_value, country, city, device, browser, os, geo_source, lat, lon = click[:10]
+                code, click_time_value, country, city, device, browser, os, geo_source = click[:8]
                 try:
                     dt = datetime.fromisoformat(click_time_value)
                     time_str = dt.strftime("%H:%M")
@@ -2249,32 +2009,28 @@ with right_col:
                     time_str = click_time_value[:5] if len(click_time_value) > 5 else click_time_value
                     date_str = "Today"
                 
-                flag = "🇺🇸" if "United States" in country else "🇵🇭" if "Philippines" in country else "🇬🇧" if "United Kingdom" in country else "🌍"
+                flag = "🇺🇸" if "United States" in country else "🇵🇭" if "Philippines" in country else "🌍"
                 geo_icon = "🎯" if geo_source == "browser_gps" else "🌐"
                 
                 st.markdown(f"""
                 <div class="recent-click">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <strong style="color: #60a5fa; font-size: 0.8rem; font-family: monospace;">{code}</strong>
-                        <div style="display: flex; gap: 0.5rem; align-items: center;">
-                            <span style="color: #6b7280; font-size: 0.6rem; background: #2d3748; padding: 0.2rem 0.6rem; border-radius: 20px;">{date_str}</span>
-                            <span style="color: #6b7280; font-size: 0.6rem; background: #2d3748; padding: 0.2rem 0.6rem; border-radius: 20px;">{time_str}</span>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <span style="color: #6b7280; font-size: 0.6rem; background: #2d3748; padding: 0.2rem 0.6rem; border-radius: 20px;">{date_str} {time_str}</span>
                         </div>
                     </div>
-                    <div style="font-size: 0.7rem; margin-top: 0.3rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                        <span style="display: flex; align-items: center; gap: 0.2rem;"><span style="font-size: 0.9rem;">{flag}</span> <span style="color: #9ca3af;">{country}</span></span>
-                        {f'<span style="color: #6b7280;">•</span> <span style="color: #9ca3af;">{city[:20]}</span>' if city and city != 'Unknown' else ''}
-                        <span style="color: #6b7280;">•</span>
-                        <span style="display: flex; align-items: center; gap: 0.2rem;"><span>{geo_icon}</span> <span style="color: #9ca3af;">{device}</span></span>
-                        <span style="color: #6b7280;">•</span>
-                        <span style="color: #9ca3af;">{browser}</span>
+                    <div style="font-size: 0.7rem; margin-top: 0.3rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <span>{flag} {country}</span>
+                        {f'<span>• {city[:20]}</span>' if city and city != 'Unknown' else ''}
+                        <span>• {geo_icon} {device}</span>
+                        <span>• {browser}</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
     else:
         st.info("🖱️ No clicks yet. Share your short links to start tracking!", icon="📊")
     
-    # Refresh button with better styling
     st.markdown("<div style='margin: 1rem 0 0.5rem 0;'></div>", unsafe_allow_html=True)
     col_refresh, col_status = st.columns([1, 1])
     with col_refresh:
@@ -2282,22 +2038,18 @@ with right_col:
             st.rerun()
     with col_status:
         st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #1e2a3a, #1a2332); border-radius: 10px; padding: 0.5rem; text-align: center; border: 1px solid #2d3748;">
-            <div style="display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
-                <span style="color: #10b981; font-size: 0.7rem;">●</span>
-                <span style="color: #9ca3af; font-size: 0.7rem;">Live</span>
-            </div>
+        <div style="background: #1e2a3a; border-radius: 10px; padding: 0.5rem; text-align: center;">
+            <span style="color: #10b981; font-size: 0.7rem;">● Live</span>
         </div>
         """, unsafe_allow_html=True)
     
-    # Danger Zone with better UX
     st.markdown("<hr style='margin: 1rem 0;'>", unsafe_allow_html=True)
     links_count, clicks_count = get_total_record_count()
     
     st.markdown("""
     <div style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem;">
         <span style="font-size: 0.9rem;">⚠️</span>
-        <h4 style="color: #f3f4f6; margin:0; font-size: 0.85rem; font-weight: 700;">Danger Zone</h4>
+        <h4 style="color: #f3f4f6; margin:0; font-size: 0.85rem;">Danger Zone</h4>
     </div>
     """, unsafe_allow_html=True)
     
@@ -2312,12 +2064,10 @@ with right_col:
         else:
             st.markdown(f"""
             <div class="warning-modal">
-                <div class="warning-title">
-                    <span>⚠️</span> DESTRUCTIVE ACTION
-                </div>
-                <p style="color: #f3f4f6; font-size: 0.75rem; margin-bottom: 0.5rem;">This will permanently delete:</p>
-                <p style="color: #f59e0b; font-size: 0.9rem; font-weight: 700; margin-bottom: 0.5rem;">📊 {links_count} link(s) and {clicks_count} click(s)</p>
-                <p style="color: #ef4444; font-size: 0.7rem; font-weight: 600;">⚠️ THIS ACTION CANNOT BE UNDONE! ⚠️</p>
+                <div class="warning-title">⚠️ DESTRUCTIVE ACTION</div>
+                <p style="color: #f3f4f6; font-size: 0.75rem;">This will permanently delete:</p>
+                <p style="color: #f59e0b; font-size: 0.9rem; font-weight: 700;">📊 {links_count} link(s) and {clicks_count} click(s)</p>
+                <p style="color: #ef4444; font-size: 0.7rem;">⚠️ THIS ACTION CANNOT BE UNDONE! ⚠️</p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -2334,7 +2084,7 @@ with right_col:
                     st.session_state.reset_confirmed = False
                     st.rerun()
     else:
-        st.button("🗑️ Reset All Data", disabled=True, use_container_width=True, help="No data to reset")
+        st.button("🗑️ Reset All Data", disabled=True, use_container_width=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -2343,10 +2093,9 @@ with right_col:
 # ============================================================================
 st.markdown("<hr style='margin: 1.5rem 0 1rem 0;'>", unsafe_allow_html=True)
 
-# Dashboard header with better spacing
 col1, col2 = st.columns([1, 3])
 with col1:
-    st.markdown("<h3 style='color: #f3f4f6; margin:0; font-size: 1.1rem; font-weight: 700;'>📋 Analytics Dashboard</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #f3f4f6; margin:0; font-size: 1.1rem;'>📋 Analytics Dashboard</h3>", unsafe_allow_html=True)
 with col2:
     st.markdown("<p style='color: #6b7280; margin: 0; font-size: 0.75rem;'>Comprehensive insights into your links' performance</p>", unsafe_allow_html=True)
 
@@ -2355,20 +2104,15 @@ st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
 links = get_all_links()
 
 if links:
-    # Create tabs for different views with enhanced styling
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Overview", "🌍 Geographic", "📱 Devices", "📍 Tracking Methods", "🔗 Link Details"])
     
     with tab1:
-        # Overview dashboard with compact charts
         col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("""
-            <div style="background: #1a2332; padding: 0.75rem; border-radius: 14px; border: 1px solid #2d3748;">
-                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-                    <span style="font-size: 1rem;">📊</span>
-                    <span style="color: #f3f4f6; font-size: 0.85rem; font-weight: 600;">Click Activity (Last 7 Days)</span>
-                </div>
+            <div style="background: #1a2332; padding: 0.75rem; border-radius: 14px;">
+                <span style="color: #f3f4f6; font-size: 0.85rem; font-weight: 600;">📊 Click Activity (Last 7 Days)</span>
             </div>
             """, unsafe_allow_html=True)
             
@@ -2376,15 +2120,7 @@ if links:
             if click_timeline and any(clicks for _, clicks in click_timeline):
                 df_timeline = pd.DataFrame(click_timeline, columns=['Date', 'Clicks'])
                 fig = px.line(df_timeline, x='Date', y='Clicks', markers=True)
-                fig.update_layout(
-                    height=250,
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white', size=10),
-                    margin=dict(l=25, r=25, t=25, b=25),
-                    xaxis=dict(gridcolor='#2d3748', title_font=dict(size=9)),
-                    yaxis=dict(gridcolor='#2d3748', title_font=dict(size=9))
-                )
+                fig.update_layout(height=250, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white', size=10))
                 fig.update_traces(line_color='#3b82f6', line_width=2.5, marker=dict(size=6, color='#60a5fa'))
                 st.plotly_chart(fig, use_container_width=True, key="daily_clicks_chart")
             else:
@@ -2392,11 +2128,8 @@ if links:
         
         with col2:
             st.markdown("""
-            <div style="background: #1a2332; padding: 0.75rem; border-radius: 14px; border: 1px solid #2d3748;">
-                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-                    <span style="font-size: 1rem;">⏰</span>
-                    <span style="color: #f3f4f6; font-size: 0.85rem; font-weight: 600;">Hourly Click Distribution</span>
-                </div>
+            <div style="background: #1a2332; padding: 0.75rem; border-radius: 14px;">
+                <span style="color: #f3f4f6; font-size: 0.85rem; font-weight: 600;">⏰ Hourly Click Distribution</span>
             </div>
             """, unsafe_allow_html=True)
             
@@ -2404,222 +2137,81 @@ if links:
             if hourly_stats:
                 df_hourly = pd.DataFrame(hourly_stats, columns=['Hour', 'Clicks'])
                 fig = px.bar(df_hourly, x='Hour', y='Clicks')
-                fig.update_layout(
-                    height=250,
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white', size=10),
-                    margin=dict(l=25, r=25, t=25, b=25),
-                    xaxis=dict(gridcolor='#2d3748', tickangle=45),
-                    yaxis=dict(gridcolor='#2d3748')
-                )
-                fig.update_traces(marker_color='#3b82f6', marker_line_width=0)
+                fig.update_layout(height=250, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white', size=10))
+                fig.update_traces(marker_color='#3b82f6')
                 st.plotly_chart(fig, use_container_width=True, key="hourly_clicks_chart")
             else:
                 st.info("No hourly data available yet", icon="⏰")
         
-        # Click distribution pie chart
         click_data = [(code, clicks) for code, _, clicks, _, _ in links if clicks > 0]
         if click_data:
-            st.markdown("""
-            <div style="background: #1a2332; padding: 0.75rem; border-radius: 14px; border: 1px solid #2d3748; margin-top: 0.75rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-                    <span style="font-size: 1rem;">🥧</span>
-                    <span style="color: #f3f4f6; font-size: 0.85rem; font-weight: 600;">Click Distribution by Link</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
             df = pd.DataFrame(click_data, columns=['Link', 'Clicks'])
-            fig = px.pie(df, values='Clicks', names='Link', title=None, hole=0.3)
-            fig.update_layout(
-                height=320,
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='white', size=10),
-                margin=dict(l=20, r=20, t=20, b=20),
-                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
-            )
-            fig.update_traces(textposition='inside', textinfo='percent+label', marker=dict(line=dict(color='#1a2332', width=2)))
+            fig = px.pie(df, values='Clicks', names='Link', hole=0.3)
+            fig.update_layout(height=320, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white', size=10))
             st.plotly_chart(fig, use_container_width=True, key="click_distribution_pie")
     
     with tab2:
-        # Geographic analytics
-        st.markdown("""
-        <div style="background: #1a2332; padding: 0.75rem; border-radius: 14px; border: 1px solid #2d3748; margin-bottom: 0.75rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span style="font-size: 1rem;">🌍</span>
-                <span style="color: #f3f4f6; font-size: 0.85rem; font-weight: 600;">Global Click Distribution</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
         country_stats_tab = get_country_stats()
         if country_stats_tab:
-            col1, col2 = st.columns([1, 1])
-            
+            col1, col2 = st.columns(2)
             with col1:
                 df_countries = pd.DataFrame(country_stats_tab, columns=['Country', 'Clicks'])
-                fig = px.bar(df_countries.head(8), x='Country', y='Clicks', title='Top Countries', color='Clicks', color_continuous_scale='blues')
-                fig.update_layout(
-                    height=300,
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white', size=10),
-                    margin=dict(l=25, r=25, t=40, b=50),
-                    xaxis=dict(gridcolor='#2d3748', tickangle=45),
-                    yaxis=dict(gridcolor='#2d3748'),
-                    coloraxis_showscale=False
-                )
+                fig = px.bar(df_countries.head(8), x='Country', y='Clicks', title='Top Countries')
+                fig.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white', size=10))
                 st.plotly_chart(fig, use_container_width=True, key="country_bar_chart_tab")
-            
             with col2:
                 fig = px.pie(df_countries.head(6), values='Clicks', names='Country', title='Distribution', hole=0.3)
-                fig.update_layout(
-                    height=300,
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white', size=10),
-                    margin=dict(l=20, r=20, t=40, b=20)
-                )
-                fig.update_traces(textposition='inside', textinfo='percent+label')
+                fig.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white', size=10))
                 st.plotly_chart(fig, use_container_width=True, key="country_pie_chart_tab")
         else:
             st.info("No geographic data available yet", icon="🌍")
     
     with tab3:
-        # Device analytics
-        st.markdown("""
-        <div style="background: #1a2332; padding: 0.75rem; border-radius: 14px; border: 1px solid #2d3748; margin-bottom: 0.75rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span style="font-size: 1rem;">📱</span>
-                <span style="color: #f3f4f6; font-size: 0.85rem; font-weight: 600;">Device & Browser Analytics</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
         col1, col2 = st.columns(2)
-        
         with col1:
             device_stats = get_device_stats()
             if device_stats:
                 df_devices = pd.DataFrame(device_stats, columns=['Device', 'Clicks'])
                 fig = px.pie(df_devices, values='Clicks', names='Device', title='Device Distribution', hole=0.3)
-                fig.update_layout(
-                    height=280,
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white', size=10),
-                    margin=dict(l=20, r=20, t=40, b=20)
-                )
+                fig.update_layout(height=280, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white', size=10))
                 st.plotly_chart(fig, use_container_width=True, key="device_pie_chart_tab")
-            else:
-                st.info("No device data yet", icon="📱")
             
-            st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
-            st.markdown("<div style='background: #1a2332; padding: 0.5rem; border-radius: 10px; border: 1px solid #2d3748;'><span style='color: #f3f4f6; font-size: 0.75rem; font-weight: 600;'>💿 Operating Systems</span></div>", unsafe_allow_html=True)
             os_stats = get_os_stats()
             if os_stats:
                 df_os = pd.DataFrame(os_stats, columns=['OS', 'Clicks'])
-                fig = px.bar(df_os, x='OS', y='Clicks', color='Clicks', color_continuous_scale='greens')
-                fig.update_layout(
-                    height=220,
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white', size=9),
-                    margin=dict(l=25, r=25, t=25, b=30),
-                    xaxis=dict(gridcolor='#2d3748'),
-                    yaxis=dict(gridcolor='#2d3748'),
-                    coloraxis_showscale=False
-                )
+                fig = px.bar(df_os, x='OS', y='Clicks', title='Operating Systems')
+                fig.update_layout(height=220, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white', size=9))
                 st.plotly_chart(fig, use_container_width=True, key="os_bar_chart_tab")
-            else:
-                st.info("No OS data yet", icon="💿")
         
         with col2:
             browser_stats = get_browser_stats()
             if browser_stats:
                 df_browsers = pd.DataFrame(browser_stats[:6], columns=['Browser', 'Clicks'])
-                fig = px.bar(df_browsers, x='Browser', y='Clicks', title='Browser Distribution', color='Clicks', color_continuous_scale='purples')
-                fig.update_layout(
-                    height=380,
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white', size=10),
-                    margin=dict(l=25, r=25, t=40, b=40),
-                    xaxis=dict(gridcolor='#2d3748', tickangle=45),
-                    yaxis=dict(gridcolor='#2d3748'),
-                    coloraxis_showscale=False
-                )
+                fig = px.bar(df_browsers, x='Browser', y='Clicks', title='Browser Distribution')
+                fig.update_layout(height=380, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white', size=10))
                 st.plotly_chart(fig, use_container_width=True, key="browser_bar_chart_tab")
-            else:
-                st.info("No browser data yet", icon="🌐")
     
     with tab4:
-        # Geolocation Tracking Methods Analytics
-        st.markdown("""
-        <div style="background: #1a2332; padding: 0.75rem; border-radius: 14px; border: 1px solid #2d3748; margin-bottom: 0.75rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span style="font-size: 1rem;">📍</span>
-                <span style="color: #f3f4f6; font-size: 0.85rem; font-weight: 600;">Tracking Method Analysis</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
         col1, col2 = st.columns(2)
-        
         with col1:
             geo_source_stats_tab = get_geo_source_stats()
             if geo_source_stats_tab:
                 df_geo_source = pd.DataFrame(geo_source_stats_tab, columns=['Method', 'Count'])
                 fig = px.pie(df_geo_source, values='Count', names='Method', title='Geolocation Source', hole=0.3)
-                fig.update_layout(
-                    height=300,
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white', size=10),
-                    margin=dict(l=20, r=20, t=40, b=20)
-                )
-                fig.update_traces(textposition='inside', textinfo='percent+label')
+                fig.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white', size=10))
                 st.plotly_chart(fig, use_container_width=True, key="geo_source_pie_tab")
-                
-                # Rename for display
-                method_names = {
-                    'browser_gps': '🎯 GPS (Browser)',
-                    'ip_detection': '🌐 IP Detection'
-                }
-                st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
-                for method, count in geo_source_stats_tab:
-                    method_display = method_names.get(method, method)
-                    st.markdown(f"""
-                    <div style="background: linear-gradient(135deg, #1e2a3a, #1a2332); padding: 0.5rem; border-radius: 10px; margin: 0.3rem 0; border-left: 3px solid #3b82f6;">
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #e5e7eb; font-size: 0.8rem;">{method_display}</span>
-                            <span style="color: #60a5fa; font-weight: 700;">{count} clicks</span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.info("No tracking method data available yet", icon="📍")
         
         with col2:
             st.markdown("""
-            <div style="background: #1a2332; padding: 0.75rem; border-radius: 14px; border: 1px solid #2d3748;">
-                <div style="margin-bottom: 0.5rem;">
-                    <span style="color: #f3f4f6; font-size: 0.8rem; font-weight: 600;">📖 About Tracking Methods</span>
-                </div>
-                <div style="font-size: 0.7rem; color: #9ca3af; line-height: 1.5;">
-                    <p><strong style="color: #10b981;">🎯 GPS (Browser)</strong> - Most accurate location data from user's browser permission. Includes precise coordinates.</p>
-                    <p><strong style="color: #3b82f6;">🌐 IP Detection</strong> - Location based on IP address. Less accurate but works without user permission.</p>
-                    <p style="margin-top: 0.5rem;">Users are prompted to share their location when clicking links. GPS tracking provides city-level accuracy while IP detection gives country/region data.</p>
-                </div>
+            <div style="background: #1a2332; padding: 0.75rem; border-radius: 14px;">
+                <h4 style="color: #f3f4f6; font-size: 0.8rem;">📖 About Tracking Methods</h4>
+                <p style="font-size: 0.7rem; color: #9ca3af;"><strong style="color: #10b981;">🎯 GPS</strong> - Most accurate, requires user permission</p>
+                <p style="font-size: 0.7rem; color: #9ca3af;"><strong style="color: #3b82f6;">🌐 IP Detection</strong> - Works without permission, less accurate</p>
             </div>
             """, unsafe_allow_html=True)
     
     with tab5:
-        # Link details
         for idx, (code, url, clicks, created, last_clicked) in enumerate(links[:5]):
-            # Format dates
             try:
                 created_dt = datetime.fromisoformat(created)
                 created_str = created_dt.strftime("%Y-%m-%d %H:%M")
@@ -2640,89 +2232,29 @@ if links:
             with st.expander(f"🔗 {code} — {clicks} click{'s' if clicks != 1 else ''}", expanded=False):
                 col1, col2 = st.columns([2, 1])
                 with col1:
-                    st.markdown(f"""
-                    <div style="background: #1e2a3a; padding: 0.75rem; border-radius: 12px; border: 1px solid #2d3748;">
-                        <p style="margin: 0.4rem 0; font-size: 0.8rem;"><span style="color: #60a5fa; font-weight: 600;">🔗 Short URL:</span> <a href="{link_full_url}" target="_blank" style="color: #3b82f6;">{link_full_url}</a></p>
-                        <p style="margin: 0.4rem 0; font-size: 0.8rem;"><span style="color: #60a5fa; font-weight: 600;">📌 Original URL:</span> <span style="color: #9ca3af; word-break: break-all;">{url[:80]}{'...' if len(url) > 80 else ''}</span></p>
-                        <p style="margin: 0.4rem 0; font-size: 0.8rem;"><span style="color: #60a5fa; font-weight: 600;">📅 Created:</span> <span style="color: #9ca3af;">{created_str}</span></p>
-                        <p style="margin: 0.4rem 0; font-size: 0.8rem;"><span style="color: #60a5fa; font-weight: 600;">⏱️ Last Clicked:</span> <span style="color: #9ca3af;">{last_str}</span></p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
+                    st.markdown(f"**Short URL:** {link_full_url}")
+                    st.markdown(f"**Original:** {url[:100]}...")
+                    st.markdown(f"**Created:** {created_str}")
+                    st.markdown(f"**Last Clicked:** {last_str}")
                 with col2:
-                    st.metric("Total Clicks", clicks, delta=clicks if clicks > 0 else None)
-                    st.link_button("🔗 Open Short Link", link_full_url, use_container_width=True)
+                    st.metric("Total Clicks", clicks)
+                    st.link_button("🔗 Open", link_full_url, use_container_width=True)
                 
-                # Country analytics for this specific link
                 if clicks > 0:
-                    st.markdown("""
-                    <div style="background: #1e2a3a; padding: 0.5rem; border-radius: 10px; border: 1px solid #2d3748; margin-top: 0.75rem;">
-                        <h5 style="color: #f3f4f6; margin-bottom: 0.5rem; font-size: 0.8rem; font-weight: 600;">🌍 Click Distribution by Country</h5>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
                     link_countries = get_link_country_stats(code)
-                    
                     if link_countries:
-                        col1, col2 = st.columns([1, 1])
-                        
-                        with col1:
-                            # Pie chart for this link
-                            df_link = pd.DataFrame(link_countries, columns=['Country', 'Clicks'])
-                            fig = px.pie(df_link, values='Clicks', names='Country', title=None, hole=0.2)
-                            fig.update_layout(
-                                height=200,
-                                paper_bgcolor='rgba(0,0,0,0)',
-                                plot_bgcolor='rgba(0,0,0,0)',
-                                font=dict(color='white', size=8),
-                                margin=dict(l=15, r=15, t=15, b=15)
-                            )
-                            st.plotly_chart(fig, use_container_width=True, key=f"link_country_pie_{code}_{idx}")
-                        
-                        with col2:
-                            # Country list
-                            st.markdown("<p style='font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;'>Top Countries:</p>", unsafe_allow_html=True)
-                            for country, count in link_countries[:4]:
-                                flag = "🌍"
-                                if "United States" in country:
-                                    flag = "🇺🇸"
-                                elif "United Kingdom" in country:
-                                    flag = "🇬🇧"
-                                elif "Philippines" in country:
-                                    flag = "🇵🇭"
-                                elif "Germany" in country:
-                                    flag = "🇩🇪"
-                                elif "France" in country:
-                                    flag = "🇫🇷"
-                                elif "Japan" in country:
-                                    flag = "🇯🇵"
-                                
-                                st.markdown(f"""
-                                <div style="background: #1a2332; padding: 0.35rem 0.6rem; border-radius: 8px; margin: 0.3rem 0; border: 1px solid #2d3748;">
-                                    <div style="display: flex; justify-content: space-between; font-size: 0.7rem;">
-                                        <span><span style="font-size: 0.8rem;">{flag}</span> {country}</span>
-                                        <span style="color: #3b82f6; font-weight: 600;">{count}</span>
-                                    </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                    else:
-                        st.info("No detailed country data for this link yet")
-                else:
-                    st.info("No clicks yet for this link. Share it to start tracking!")
+                        df_link = pd.DataFrame(link_countries, columns=['Country', 'Clicks'])
+                        fig = px.pie(df_link, values='Clicks', names='Country', hole=0.2)
+                        fig.update_layout(height=200, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True, key=f"link_pie_{code}_{idx}")
         
-        # Show message if there are more links
         if len(links) > 5:
-            st.info(f"📊 Showing 5 of {len(links)} links. Create more links to see them all here!", icon="ℹ️")
+            st.info(f"📊 Showing 5 of {len(links)} links", icon="ℹ️")
 else:
-    # Enhanced empty state
     st.markdown("""
-    <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #1a2332, #111827); border-radius: 20px; border: 1px dashed #3b82f6; margin: 1rem 0;">
-        <div style="font-size: 4rem; margin-bottom: 1rem;">👋</div>
-        <h3 style="color: #f3f4f6; margin-bottom: 0.5rem; font-size: 1.2rem; font-weight: 600;">No Links Created Yet</h3>
-        <p style="color: #9ca3af; margin-bottom: 1.5rem; font-size: 0.85rem;">Create your first short link above and start tracking your audience!</p>
-        <div style="background: #1e2a3a; padding: 0.75rem 1.5rem; border-radius: 12px; display: inline-block; border: 1px solid #3b82f6;">
-            <span style="color: #60a5fa; font-size: 0.8rem; font-weight: 500;">⬆️ Use the form on the left to get started</span>
-        </div>
+    <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #1a2332, #111827); border-radius: 20px; border: 1px dashed #3b82f6;">
+        <h3 style="color: #f3f4f6;">No Links Created Yet</h3>
+        <p style="color: #9ca3af;">Create your first short link above!</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2734,13 +2266,13 @@ current_year = datetime.now().year
 st.markdown(f"""
 <div class="footer">
     <div class="footer-stats">
-        <div><span style="color: #3b82f6; font-weight: 800;">{total_links}</span> <span style="color: #6b7280;">Links</span></div>
-        <div><span style="color: #10b981; font-weight: 800;">{total_clicks}</span> <span style="color: #6b7280;">Clicks</span></div>
-        <div><span style="color: #f59e0b; font-weight: 800;">{total_countries}</span> <span style="color: #6b7280;">Countries</span></div>
-        <div><span style="color: #ef4444; font-weight: 800;">{clicks_24h}</span> <span style="color: #6b7280;">Last 24h</span></div>
-        <div><span style="color: #8b5cf6; font-weight: 800;">{gps_clicks}</span> <span style="color: #6b7280;">GPS Tracked</span></div>
+        <div><span style="color: #3b82f6;">{total_links}</span> Links</div>
+        <div><span style="color: #10b981;">{total_clicks}</span> Clicks</div>
+        <div><span style="color: #f59e0b;">{total_countries}</span> Countries</div>
+        <div><span style="color: #ef4444;">{clicks_24h}</span> Last 24h</div>
+        <div><span style="color: #8b5cf6;">{gps_clicks}</span> GPS Tracked</div>
     </div>
-    <p style="font-size: 0.75rem;">🔗 SmartLink URL Shortener • {domain_display} • Real-time Analytics • UTM Tracking • GPS Geolocation</p>
-    <p style="color: #4b5563; font-size: 0.7rem;">© {current_year} SmartLink • Made with ❤️ for the Philippines 🇵🇭</p>
+    <p>🔗 SmartLink URL Shortener • {domain_display} • Real-time Analytics • GPS Geolocation</p>
+    <p>© {current_year} SmartLink • Made with ❤️ for the Philippines 🇵🇭</p>
 </div>
 """, unsafe_allow_html=True)
