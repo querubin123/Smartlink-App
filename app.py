@@ -61,10 +61,6 @@ if 'success_full_url' not in st.session_state:
     st.session_state['success_full_url'] = ""
 if 'success_short_code' not in st.session_state:
     st.session_state['success_short_code'] = ""
-if 'success_final_url' not in st.session_state:
-    st.session_state['success_final_url'] = ""
-if 'success_utm_params' not in st.session_state:
-    st.session_state['success_utm_params'] = {}
 if 'browser_location' not in st.session_state:
     st.session_state['browser_location'] = None
 if 'geolocation_permission_granted' not in st.session_state:
@@ -429,43 +425,6 @@ st.markdown("""
     .tooltip-container:hover .tooltip-text {
         visibility: visible;
         opacity: 1;
-    }
-    
-    /* UTM Section styling */
-    .utm-section {
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(16, 185, 129, 0.03));
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 0.8rem;
-        margin-top: 0.5rem;
-    }
-    
-    .utm-header {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 0.5rem;
-        padding-bottom: 0.4rem;
-        border-bottom: 1px solid var(--primary);
-    }
-    
-    .utm-header h3 {
-        color: var(--text-primary);
-        margin: 0;
-        font-size: 0.9rem;
-        font-weight: 600;
-    }
-    
-    .utm-badge {
-        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-        padding: 0.2rem 0.6rem;
-        border-radius: 20px;
-        font-size: 0.65rem;
-        font-weight: 600;
-        color: white;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
     }
 
     /* Expander styling */
@@ -1450,29 +1409,6 @@ def get_geo_source_stats():
             conn.close()
 
 # ============================================================================
-# UTM HELPER FUNCTIONS
-# ============================================================================
-def add_utm_parameters(base_url, utm_params):
-    """Add UTM parameters to a URL"""
-    utm_params = {k: v for k, v in utm_params.items() if v and v.strip()}
-    
-    if not utm_params:
-        return base_url
-    
-    parsed = urllib.parse.urlparse(base_url)
-    query_params = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
-    
-    for key, value in utm_params.items():
-        if value and value.strip():
-            query_params[key] = [value.strip()]
-    
-    new_query = urllib.parse.urlencode(query_params, doseq=True)
-    new_parsed = parsed._replace(query=new_query)
-    final_url = urllib.parse.urlunparse(new_parsed)
-    
-    return final_url
-
-# ============================================================================
 # REDIRECT HANDLER - WORKS WITH BOTH ?go= AND /code FORMATS
 # ============================================================================
 
@@ -1658,7 +1594,6 @@ st.markdown(f"""
     <span class="status-badge">⚡ Real-time Analytics</span>
     <span class="status-badge">✓ 100% Free</span>
     <span class="status-badge">🔒 Secure & Reliable</span>
-    <span class="status-badge">📊 UTM Tracking</span>
     <span class="status-badge">🌍 {total_countries} Countries</span>
     <span class="status-badge">📍 {gps_clicks} GPS-tracked</span>
 </div>
@@ -1709,91 +1644,9 @@ with left_col:
                 st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
                 submit = st.form_submit_button("🚀 Generate Short Link", use_container_width=True)
             
-            with st.expander("📊 UTM Tracking Parameters (Optional)", expanded=False):
-                st.markdown("<p style='color: #9ca3af; font-size: 0.75rem; margin-bottom: 0.75rem;'>Track your marketing campaigns with UTM parameters</p>", unsafe_allow_html=True)
-                
-                utm_col1, utm_col2 = st.columns(2)
-                
-                with utm_col1:
-                    st.markdown("""
-                    <div class="field-label">
-                        <span>🎯</span> utm_source
-                        <div class="tooltip-container">
-                            <span class="tooltip-icon">?</span>
-                            <span class="tooltip-text">Identifies the source of traffic (e.g., "google", "facebook", "newsletter").</span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    utm_source = st.text_input("", placeholder="e.g., google, facebook", key="utm_source", label_visibility="collapsed")
-                    
-                    st.markdown("""
-                    <div class="field-label">
-                        <span>🔍</span> utm_medium
-                        <div class="tooltip-container">
-                            <span class="tooltip-icon">?</span>
-                            <span class="tooltip-text">Identifies the marketing medium (e.g., "cpc", "email", "social").</span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    utm_medium = st.text_input("", placeholder="e.g., cpc, email", key="utm_medium", label_visibility="collapsed")
-                
-                with utm_col2:
-                    st.markdown("""
-                    <div class="field-label">
-                        <span>📢</span> utm_campaign
-                        <div class="tooltip-container">
-                            <span class="tooltip-icon">?</span>
-                            <span class="tooltip-text">Identifies the specific campaign (e.g., "summer-sale", "black-friday").</span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    utm_campaign = st.text_input("", placeholder="e.g., summer-sale", key="utm_campaign", label_visibility="collapsed")
-                    
-                    st.markdown("""
-                    <div class="field-label">
-                        <span>🏷️</span> utm_term
-                        <div class="tooltip-container">
-                            <span class="tooltip-icon">?</span>
-                            <span class="tooltip-text">Identifies paid search keywords (e.g., "running+shoes").</span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    utm_term = st.text_input("", placeholder="e.g., keyword+phrase", key="utm_term", label_visibility="collapsed")
-                
-                st.markdown("""
-                <div class="field-label">
-                    <span>📝</span> utm_content
-                    <div class="tooltip-container">
-                        <span class="tooltip-icon">?</span>
-                        <span class="tooltip-text">Differentiates similar content or links within the same campaign (e.g., "cta-button", "banner-ad").</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                utm_content = st.text_input("", placeholder="e.g., cta-button, banner", key="utm_content", label_visibility="collapsed")
-            
             if submit and url:
                 if not url.startswith(('http://', 'https://')):
                     url = 'https://' + url
-                
-                # Collect UTM parameters from form
-                utm_params = {}
-                if utm_source and utm_source.strip():
-                    utm_params['utm_source'] = utm_source.strip()
-                if utm_medium and utm_medium.strip():
-                    utm_params['utm_medium'] = utm_medium.strip()
-                if utm_campaign and utm_campaign.strip():
-                    utm_params['utm_campaign'] = utm_campaign.strip()
-                if utm_term and utm_term.strip():
-                    utm_params['utm_term'] = utm_term.strip()
-                if utm_content and utm_content.strip():
-                    utm_params['utm_content'] = utm_content.strip()
-                
-                # Add UTM parameters to URL
-                final_url = add_utm_parameters(url, utm_params)
-                
-                # Debug output
-                st.write(f"🔍 Debug: Original URL: {url}")
-                st.write(f"🔍 Debug: Final URL with UTM: {final_url}")
                 
                 # Generate short code
                 if custom_code and custom_code.strip():
@@ -1808,23 +1661,16 @@ with left_col:
                 if check_link_exists(short_code):
                     st.error(f"❌ Code '{short_code}' is already taken. Try another one.")
                 else:
-                    # Create link with the URL containing UTM parameters
-                    if create_link(short_code, final_url):
-                        # Verify the URL was stored correctly
-                        verify_url = get_link(short_code)
-                        if verify_url != final_url:
-                            st.error(f"URL storage verification failed! Expected: {final_url}, Got: {verify_url}")
-                        else:
-                            full_url = f"{app_domain}/?go={short_code}"
-                            
-                            st.session_state['show_success'] = True
-                            st.session_state['success_full_url'] = full_url
-                            st.session_state['success_short_code'] = short_code
-                            st.session_state['success_final_url'] = final_url
-                            st.session_state['success_utm_params'] = utm_params
-                            
-                            st.balloons()
-                            st.rerun()
+                    # Create link
+                    if create_link(short_code, url):
+                        full_url = f"{app_domain}/?go={short_code}"
+                        
+                        st.session_state['show_success'] = True
+                        st.session_state['success_full_url'] = full_url
+                        st.session_state['success_short_code'] = short_code
+                        
+                        st.balloons()
+                        st.rerun()
                     else:
                         st.error("Failed to create link. Please try again.")
         
@@ -1834,25 +1680,10 @@ with left_col:
 if st.session_state.get('show_success', False):
     full_url = st.session_state['success_full_url']
     short_code = st.session_state['success_short_code']
-    final_url = st.session_state['success_final_url']
-    utm_params = st.session_state.get('success_utm_params', {})
     
     st.markdown("""
     <div style="margin: 0.5rem 0 1rem 0;">
     """, unsafe_allow_html=True)
-    
-    if utm_params:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(16, 185, 129, 0.08)); border-left: 4px solid #3b82f6; padding: 0.75rem 1rem; border-radius: 12px; margin-bottom: 1rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-                <span style="font-size: 1rem;">📊</span>
-                <strong style="color: #60a5fa; font-size: 0.85rem;">UTM Parameters Applied</strong>
-            </div>
-            <code style="color: #f59e0b; font-size: 0.75rem; background: rgba(0,0,0,0.3); padding: 0.4rem 0.7rem; border-radius: 8px; display: inline-block;">
-                {' & '.join([f'{k}={v}' for k, v in utm_params.items()])}
-            </code>
-        </div>
-        """, unsafe_allow_html=True)
     
     st.markdown(f"""
     <div class="url-card">
