@@ -137,7 +137,6 @@ No environment variables are required for local development. The app uses:
    - Python version: 3.9+
 6. Click "Deploy"
 
-Your app will be live at: **https://smartlinkapp.streamlit.app/**
 
 ## 📖 Usage Guide
 
