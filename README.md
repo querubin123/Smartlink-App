@@ -1,6 +1,3 @@
-Here's your updated README file with all the new geolocation features included:
-
-```markdown
 # 🔗 SmartLink - Professional URL Shortener & Analytics
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://smartlinkapp.streamlit.app/)
